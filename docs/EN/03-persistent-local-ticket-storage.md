@@ -9,7 +9,7 @@ Persistent local ticket storage lets the driver continue working even if the tab
 - Start a shift and keep it saved locally.
 - Sell cash tickets and keep them saved locally.
 - Restart the app and return to the active shift.
-- See how many tickets are waiting for future sync.
+- See current-shift tickets separately from the total tickets waiting for future sync.
 - End the shift while keeping sold tickets stored for later server upload.
 
 ## Business value
@@ -18,7 +18,7 @@ This module protects ticket and cash data during daily bus operations. A closed 
 
 ## Current implementation status
 
-The app uses local Android app storage through the offline-first repository. The active shift is stored separately from the ticket list. Tickets remain marked as unsynced so a later sync module can upload them to the backend.
+The app uses local Android app storage through the offline-first repository. The active shift is stored separately from the ticket list. The driver screen shows current-shift ticket totals separately from the total unsynced local queue. Tickets remain marked as unsynced so a later sync module can upload them to the backend.
 
 ## Planned improvements
 

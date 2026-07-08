@@ -88,7 +88,7 @@ fun DriverHomeScreen(viewModel: DriverShiftViewModel = viewModel()) {
 
                     Spacer(modifier = Modifier.height(20.dp))
 
-                    Text(text = "Tickets sold", fontWeight = FontWeight.Bold)
+                    Text(text = "Current shift tickets", fontWeight = FontWeight.Bold)
                     Text(text = state.ticketCount.toString())
 
                     Spacer(modifier = Modifier.height(20.dp))
@@ -98,8 +98,8 @@ fun DriverHomeScreen(viewModel: DriverShiftViewModel = viewModel()) {
 
                     Spacer(modifier = Modifier.height(20.dp))
 
-                    Text(text = "Waiting for sync", fontWeight = FontWeight.Bold)
-                    Text(text = "${state.pendingTicketCount} tickets saved locally")
+                    Text(text = "Total waiting for sync", fontWeight = FontWeight.Bold)
+                    Text(text = "${state.pendingTicketCount} total tickets saved locally")
 
                     state.lastClosedSummary?.let { summary ->
                         Spacer(modifier = Modifier.height(20.dp))

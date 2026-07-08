@@ -21,7 +21,8 @@ This module adds local persistence to the driver shift flow. It keeps the active
   - Clears only the active shift marker when the shift ends, leaving tickets available for future sync.
 
 - `app/src/main/java/com/buspay/app/ui/screens/DriverHomeScreen.kt`
-  - Displays the number of locally saved tickets waiting for sync.
+  - Displays current-shift ticket count.
+  - Displays the total local unsynced ticket queue waiting for sync.
 
 ## Storage model
 
@@ -31,6 +32,8 @@ The repository currently uses two keys:
 - `tickets`: one JSON array containing locally saved tickets.
 
 Each ticket keeps `synced = false`. This preserves a queue of tickets that a future sync module can send to the server.
+
+The active shift ticket count and the pending sync count can be different. The active shift count only includes restored or newly sold tickets for the current shift. The pending sync count includes all locally stored unsynced tickets from every shift until the future server sync module marks them as synced.
 
 ## Business rules in this module
 
