@@ -1,6 +1,7 @@
 package com.buspay.app.ui.screens
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -9,19 +10,31 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Button
+import androidx.compose.material3.Card
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.viewmodel.compose.viewModel
+import com.buspay.app.domain.Bus
+import com.buspay.app.domain.Route
 
 @Composable
-fun DriverHomeScreen() {
+fun DriverHomeScreen(viewModel: DriverShiftViewModel = viewModel()) {
+    val state = viewModel.uiState
+
     MaterialTheme {
         Surface(modifier = Modifier.fillMaxSize()) {
             Column(
@@ -41,20 +54,53 @@ fun DriverHomeScreen() {
                         style = MaterialTheme.typography.bodyLarge
                     )
 
-                    Spacer(modifier = Modifier.height(32.dp))
+                    Spacer(modifier = Modifier.height(24.dp))
 
-                    Text(text = "Route", fontWeight = FontWeight.Bold)
-                    Text(text = "Not selected")
+                    Text(text = "Driver", fontWeight = FontWeight.Bold)
+                    Text(text = state.driver.name)
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    SelectorCard(
+                        title = "Bus",
+                        selectedText = state.selectedBus?.plateNumber ?: "Select bus",
+                        enabled = !state.isShiftActive,
+                        items = state.buses,
+                        itemText = Bus::plateNumber,
+                        onItemSelected = viewModel::selectBus
+                    )
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    SelectorCard(
+                        title = "Route",
+                        selectedText = state.selectedRoute?.name ?: "Select route",
+                        enabled = !state.isShiftActive,
+                        items = state.routes,
+                        itemText = Route::name,
+                        onItemSelected = viewModel::selectRoute
+                    )
 
                     Spacer(modifier = Modifier.height(20.dp))
 
                     Text(text = "Next stop", fontWeight = FontWeight.Bold)
-                    Text(text = "Start a shift to begin tracking")
+                    Text(text = if (state.isShiftActive) state.nextStopName else "Start a shift to begin tracking")
 
                     Spacer(modifier = Modifier.height(20.dp))
 
                     Text(text = "Tickets sold", fontWeight = FontWeight.Bold)
-                    Text(text = "0")
+                    Text(text = state.ticketCount.toString())
+
+                    Spacer(modifier = Modifier.height(20.dp))
+
+                    Text(text = "Cash total", fontWeight = FontWeight.Bold)
+                    Text(text = formatEuroCents(state.cashTotalCents))
+
+                    state.lastClosedSummary?.let { summary ->
+                        Spacer(modifier = Modifier.height(20.dp))
+                        Text(text = "Last closed shift", fontWeight = FontWeight.Bold)
+                        Text(text = "${summary.ticketCount} tickets / ${formatEuroCents(summary.cashTotalCents)}")
+                    }
                 }
 
                 Row(
@@ -62,14 +108,26 @@ fun DriverHomeScreen() {
                     horizontalArrangement = Arrangement.spacedBy(12.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Button(
-                        onClick = {},
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        Text("Start Shift")
+                    if (state.isShiftActive) {
+                        OutlinedButton(
+                            onClick = viewModel::endShift,
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Text("End Shift")
+                        }
+                    } else {
+                        Button(
+                            onClick = viewModel::startShift,
+                            enabled = state.selectedBus != null && state.selectedRoute != null,
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Text("Start Shift")
+                        }
                     }
-                    OutlinedButton(
-                        onClick = {},
+
+                    Button(
+                        onClick = viewModel::sellTicket,
+                        enabled = state.isShiftActive,
                         modifier = Modifier.weight(1f)
                     ) {
                         Text("Sell Ticket")
@@ -78,4 +136,52 @@ fun DriverHomeScreen() {
             }
         }
     }
+}
+
+@Composable
+private fun <T> SelectorCard(
+    title: String,
+    selectedText: String,
+    enabled: Boolean,
+    items: List<T>,
+    itemText: (T) -> String,
+    onItemSelected: (T) -> Unit
+) {
+    var expanded by remember { mutableStateOf(false) }
+
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Text(text = title, fontWeight = FontWeight.Bold)
+            Spacer(modifier = Modifier.height(8.dp))
+            Box {
+                OutlinedButton(
+                    onClick = { expanded = true },
+                    enabled = enabled,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(selectedText)
+                }
+                DropdownMenu(
+                    expanded = expanded,
+                    onDismissRequest = { expanded = false }
+                ) {
+                    items.forEach { item ->
+                        DropdownMenuItem(
+                            text = { Text(itemText(item)) },
+                            onClick = {
+                                expanded = false
+                                onItemSelected(item)
+                            }
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+private fun formatEuroCents(cents: Int): String {
+    val euros = cents / 100
+    val remainder = cents % 100
+    return "EUR $euros.${remainder.toString().padStart(2, '0')}"
 }

@@ -40,3 +40,8 @@ data class Ticket(
     val soldAtMillis: Long,
     val synced: Boolean
 )
+
+data class DriverShiftSummary(
+    val ticketCount: Int,
+    val cashTotalCents: Int
+)
