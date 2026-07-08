@@ -2,6 +2,7 @@ package com.buspay.app.data
 
 import android.content.Context
 import android.content.SharedPreferences
+import com.buspay.app.domain.Driver
 import com.buspay.app.domain.Shift
 import com.buspay.app.domain.Ticket
 import org.json.JSONArray
@@ -22,6 +23,23 @@ class OfflineFirstRepository(context: Context) {
     fun loadActiveShift(): Shift? {
         return preferences.getString(KEY_ACTIVE_SHIFT, null)
             ?.let { shiftFromJson(JSONObject(it)) }
+    }
+
+    fun saveSignedInDriver(driver: Driver) {
+        preferences.edit()
+            .putString(KEY_SIGNED_IN_DRIVER, driver.toJson().toString())
+            .apply()
+    }
+
+    fun loadSignedInDriver(): Driver? {
+        return preferences.getString(KEY_SIGNED_IN_DRIVER, null)
+            ?.let { driverFromJson(JSONObject(it)) }
+    }
+
+    fun clearSignedInDriver() {
+        preferences.edit()
+            .remove(KEY_SIGNED_IN_DRIVER)
+            .apply()
     }
 
     fun saveTicket(ticket: Ticket) {
@@ -71,6 +89,12 @@ class OfflineFirstRepository(context: Context) {
             .put("endedAtMillis", endedAtMillis)
     }
 
+    private fun Driver.toJson(): JSONObject {
+        return JSONObject()
+            .put("id", id)
+            .put("name", name)
+    }
+
     private fun Ticket.toJson(): JSONObject {
         return JSONObject()
             .put("id", id)
@@ -83,7 +107,15 @@ class OfflineFirstRepository(context: Context) {
     private companion object {
         const val STORAGE_NAME = "offline_first_repository"
         const val KEY_ACTIVE_SHIFT = "active_shift"
+        const val KEY_SIGNED_IN_DRIVER = "signed_in_driver"
         const val KEY_TICKETS = "tickets"
+
+        fun driverFromJson(json: JSONObject): Driver {
+            return Driver(
+                id = json.getString("id"),
+                name = json.getString("name")
+            )
+        }
 
         fun shiftFromJson(json: JSONObject): Shift {
             return Shift(

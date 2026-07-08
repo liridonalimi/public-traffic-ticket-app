@@ -29,6 +29,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.buspay.app.domain.Bus
+import com.buspay.app.domain.Driver
 import com.buspay.app.domain.Route
 
 @Composable
@@ -57,7 +58,40 @@ fun DriverHomeScreen(viewModel: DriverShiftViewModel = viewModel()) {
                     Spacer(modifier = Modifier.height(24.dp))
 
                     Text(text = "Driver", fontWeight = FontWeight.Bold)
-                    Text(text = state.driver.name)
+                    if (state.signedInDriver == null) {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        SelectorCard(
+                            title = "Sign in driver",
+                            selectedText = state.selectedDriver?.name ?: "Select driver",
+                            enabled = !state.isShiftActive,
+                            items = state.availableDrivers,
+                            itemText = Driver::name,
+                            onItemSelected = viewModel::selectDriver
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Button(
+                            onClick = viewModel::signInDriver,
+                            enabled = state.selectedDriver != null,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text("Sign In")
+                        }
+                    } else {
+                        state.signedInDriver?.let { driver ->
+                            Text(text = driver.name)
+                            Text(text = "ID: ${driver.id}")
+                        }
+
+                        if (!state.isShiftActive) {
+                            Spacer(modifier = Modifier.height(8.dp))
+                            OutlinedButton(
+                                onClick = viewModel::signOutDriver,
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Text("Sign Out")
+                            }
+                        }
+                    }
 
                     Spacer(modifier = Modifier.height(16.dp))
 
@@ -123,7 +157,9 @@ fun DriverHomeScreen(viewModel: DriverShiftViewModel = viewModel()) {
                     } else {
                         Button(
                             onClick = viewModel::startShift,
-                            enabled = state.selectedBus != null && state.selectedRoute != null,
+                            enabled = state.isDriverSignedIn &&
+                                state.selectedBus != null &&
+                                state.selectedRoute != null,
                             modifier = Modifier.weight(1f)
                         ) {
                             Text("Start Shift")

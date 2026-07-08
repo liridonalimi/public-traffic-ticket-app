@@ -15,7 +15,9 @@ import com.buspay.app.domain.Stop
 import com.buspay.app.domain.Ticket
 
 data class DriverShiftUiState(
-    val driver: Driver = Driver(id = "driver-001", name = "Demo Driver"),
+    val availableDrivers: List<Driver> = emptyList(),
+    val selectedDriver: Driver? = null,
+    val signedInDriver: Driver? = null,
     val buses: List<Bus> = emptyList(),
     val routes: List<Route> = emptyList(),
     val selectedBus: Bus? = null,
@@ -25,6 +27,7 @@ data class DriverShiftUiState(
     val pendingTicketCount: Int = 0,
     val lastClosedSummary: DriverShiftSummary? = null
 ) {
+    val isDriverSignedIn: Boolean = signedInDriver != null
     val isShiftActive: Boolean = activeShift != null
     val nextStopName: String = selectedRoute?.stops?.firstOrNull()?.name ?: "Select a route"
     val ticketCount: Int = tickets.size
@@ -37,6 +40,23 @@ class DriverShiftViewModel(application: Application) : AndroidViewModel(applicat
     var uiState by mutableStateOf(createInitialState())
         private set
 
+    fun selectDriver(driver: Driver) {
+        if (uiState.isDriverSignedIn || uiState.isShiftActive) return
+        uiState = uiState.copy(selectedDriver = driver, lastClosedSummary = null)
+    }
+
+    fun signInDriver() {
+        val driver = uiState.selectedDriver ?: return
+        repository.saveSignedInDriver(driver)
+        uiState = uiState.copy(signedInDriver = driver, lastClosedSummary = null)
+    }
+
+    fun signOutDriver() {
+        if (uiState.isShiftActive) return
+        repository.clearSignedInDriver()
+        uiState = uiState.copy(signedInDriver = null, lastClosedSummary = null)
+    }
+
     fun selectBus(bus: Bus) {
         if (uiState.isShiftActive) return
         uiState = uiState.copy(selectedBus = bus, lastClosedSummary = null)
@@ -48,13 +68,14 @@ class DriverShiftViewModel(application: Application) : AndroidViewModel(applicat
     }
 
     fun startShift() {
+        val driver = uiState.signedInDriver ?: return
         val bus = uiState.selectedBus ?: return
         val route = uiState.selectedRoute ?: return
 
         uiState = uiState.copy(
             activeShift = Shift(
                 id = "shift-${System.currentTimeMillis()}",
-                driverId = uiState.driver.id,
+                driverId = driver.id,
                 busId = bus.id,
                 routeId = route.id,
                 startedAtMillis = System.currentTimeMillis()
@@ -103,11 +124,19 @@ class DriverShiftViewModel(application: Application) : AndroidViewModel(applicat
 
     private fun createInitialState(): DriverShiftUiState {
         val restoredShift = repository.loadActiveShift()
+        val restoredDriver = restoredShift?.let { shift ->
+            demoDrivers.firstOrNull { it.id == shift.driverId }
+        } ?: repository.loadSignedInDriver()?.let { signedInDriver ->
+            demoDrivers.firstOrNull { it.id == signedInDriver.id } ?: signedInDriver
+        }
         val restoredTickets = restoredShift?.let { shift ->
             repository.loadTicketsForShift(shift.id)
         }.orEmpty()
 
         return DriverShiftUiState(
+            availableDrivers = demoDrivers,
+            selectedDriver = restoredDriver ?: demoDrivers.first(),
+            signedInDriver = restoredDriver,
             buses = demoBuses,
             routes = demoRoutes,
             selectedBus = restoredShift?.let { shift ->
@@ -124,6 +153,12 @@ class DriverShiftViewModel(application: Application) : AndroidViewModel(applicat
 
     private companion object {
         const val STANDARD_TICKET_PRICE_CENTS = 50
+
+        val demoDrivers = listOf(
+            Driver(id = "driver-001", name = "Arben Krasniqi"),
+            Driver(id = "driver-002", name = "Drita Berisha"),
+            Driver(id = "driver-003", name = "Ilir Gashi")
+        )
 
         val demoBuses = listOf(
             Bus(id = "bus-101", plateNumber = "01-101-KS"),
