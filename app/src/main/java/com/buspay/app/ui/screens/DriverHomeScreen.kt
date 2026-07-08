@@ -96,6 +96,11 @@ fun DriverHomeScreen(viewModel: DriverShiftViewModel = viewModel()) {
                     Text(text = "Cash total", fontWeight = FontWeight.Bold)
                     Text(text = formatEuroCents(state.cashTotalCents))
 
+                    Spacer(modifier = Modifier.height(20.dp))
+
+                    Text(text = "Waiting for sync", fontWeight = FontWeight.Bold)
+                    Text(text = "${state.pendingTicketCount} tickets saved locally")
+
                     state.lastClosedSummary?.let { summary ->
                         Spacer(modifier = Modifier.height(20.dp))
                         Text(text = "Last closed shift", fontWeight = FontWeight.Bold)

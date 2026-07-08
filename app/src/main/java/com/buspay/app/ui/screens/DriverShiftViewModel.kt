@@ -1,9 +1,11 @@
 package com.buspay.app.ui.screens
 
+import android.app.Application
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
-import androidx.lifecycle.ViewModel
+import androidx.lifecycle.AndroidViewModel
+import com.buspay.app.data.OfflineFirstRepository
 import com.buspay.app.domain.Bus
 import com.buspay.app.domain.Driver
 import com.buspay.app.domain.DriverShiftSummary
@@ -20,6 +22,7 @@ data class DriverShiftUiState(
     val selectedRoute: Route? = null,
     val activeShift: Shift? = null,
     val tickets: List<Ticket> = emptyList(),
+    val pendingTicketCount: Int = 0,
     val lastClosedSummary: DriverShiftSummary? = null
 ) {
     val isShiftActive: Boolean = activeShift != null
@@ -28,15 +31,10 @@ data class DriverShiftUiState(
     val cashTotalCents: Int = tickets.sumOf { it.priceCents }
 }
 
-class DriverShiftViewModel : ViewModel() {
-    var uiState by mutableStateOf(
-        DriverShiftUiState(
-            buses = demoBuses,
-            routes = demoRoutes,
-            selectedBus = demoBuses.first(),
-            selectedRoute = demoRoutes.first()
-        )
-    )
+class DriverShiftViewModel(application: Application) : AndroidViewModel(application) {
+    private val repository = OfflineFirstRepository(application.applicationContext)
+
+    var uiState by mutableStateOf(createInitialState())
         private set
 
     fun selectBus(bus: Bus) {
@@ -62,8 +60,11 @@ class DriverShiftViewModel : ViewModel() {
                 startedAtMillis = System.currentTimeMillis()
             ),
             tickets = emptyList(),
+            pendingTicketCount = repository.pendingTicketCount(),
             lastClosedSummary = null
         )
+
+        uiState.activeShift?.let(repository::saveActiveShift)
     }
 
     fun sellTicket() {
@@ -76,19 +77,48 @@ class DriverShiftViewModel : ViewModel() {
             synced = false
         )
 
-        uiState = uiState.copy(tickets = uiState.tickets + ticket)
+        repository.saveTicket(ticket)
+
+        uiState = uiState.copy(
+            tickets = uiState.tickets + ticket,
+            pendingTicketCount = repository.pendingTicketCount()
+        )
     }
 
     fun endShift() {
         if (!uiState.isShiftActive) return
 
+        repository.clearActiveShift()
+
         uiState = uiState.copy(
             activeShift = null,
             tickets = emptyList(),
+            pendingTicketCount = repository.pendingTicketCount(),
             lastClosedSummary = DriverShiftSummary(
                 ticketCount = uiState.ticketCount,
                 cashTotalCents = uiState.cashTotalCents
             )
+        )
+    }
+
+    private fun createInitialState(): DriverShiftUiState {
+        val restoredShift = repository.loadActiveShift()
+        val restoredTickets = restoredShift?.let { shift ->
+            repository.loadTicketsForShift(shift.id)
+        }.orEmpty()
+
+        return DriverShiftUiState(
+            buses = demoBuses,
+            routes = demoRoutes,
+            selectedBus = restoredShift?.let { shift ->
+                demoBuses.firstOrNull { it.id == shift.busId }
+            } ?: demoBuses.first(),
+            selectedRoute = restoredShift?.let { shift ->
+                demoRoutes.firstOrNull { it.id == shift.routeId }
+            } ?: demoRoutes.first(),
+            activeShift = restoredShift,
+            tickets = restoredTickets,
+            pendingTicketCount = repository.pendingTicketCount()
         )
     }
 
