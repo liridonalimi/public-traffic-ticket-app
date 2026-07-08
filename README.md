@@ -36,3 +36,33 @@ Build persistent local ticket storage:
 2. Save sold tickets locally.
 3. Restore active shift after app restart.
 4. Prepare unsynced tickets for future server sync.
+
+#######################################
+
+# Aplikacioni i Gjobave të Trafikut Publik
+
+Pilot i brendshëm Android për një sistem biletash autobusësh dhe informacioni për pasagjerët.
+
+## Statusi aktual
+
+Depozita është përgatitur me një skelet aplikacioni Android Kotlin + Jetpack Compose.
+
+Aktualisht përfshin:
+
+- ekranin e konsolës së shoferit
+- modelet e domenit bazë për autobusët, shoferët, itineraret, ndalesat, turnet dhe biletat
+- vendin e depozitës së parë jashtë linje
+- ndërfaqet e integrimit të pajisjes për butonat GPS, printerin dhe kërkesën për ndalesë
+- Udhëzuesin e konfigurimit Android në `docs/SETUP.md`
+
+## Pika e ndërtimit tjetër
+
+Ndërtoni rrjedhën e parë të vërtetë të shoferit:
+
+1. Hyrja e shoferit
+2. Përzgjedhja e autobusit dhe itinerarit
+3. Fillimi i turnit
+4. Gjurmimi GPS
+5. Shitja e biletave me para në dorë
+6. Ruajtja e biletave jashtë linje
+7. Raporti i mbylljes së turnit
