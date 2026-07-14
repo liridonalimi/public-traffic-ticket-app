@@ -45,17 +45,24 @@ It currently includes:
 
 Presentation documentation:
 
+- English: `docs/EN/01-project-foundation-and-android-skeleton.md`
 - English: `docs/EN/02-driver-shift-flow.md`
 - English: `docs/EN/03-persistent-local-ticket-storage.md`
 - English: `docs/EN/04-driver-login-and-identity.md`
+- English: `docs/EN/05-ticket-fares-and-discounts.md`
+- English: `docs/EN/06-bluetooth-and-pdf-ticket-printing.md`
 - English: `docs/EN/07-gps-route-progress-and-passenger-display.md`
+- Albanian: `docs/SQ/01-themeli-i-projektit-dhe-skeleti-android.md`
 - Albanian: `docs/SQ/02-rrjedha-e-turnit-te-shoferit.md`
 - Albanian: `docs/SQ/03-ruajtja-lokale-e-biletave.md`
 - Albanian: `docs/SQ/04-kycja-dhe-identiteti-i-shoferit.md`
+- Albanian: `docs/SQ/05-tarifat-e-biletave-dhe-zbritjet.md`
+- Albanian: `docs/SQ/06-printimi-i-biletave-me-bluetooth-dhe-pdf.md`
 - Albanian: `docs/SQ/07-perparimi-i-linjes-me-gps-dhe-ekrani-i-pasagjereve.md`
 
 Technical documentation:
 
+- `docs/TECHNICAL/01-project-foundation-and-android-skeleton.md`
 - `docs/TECHNICAL/02-driver-shift-flow.md`
 - `docs/TECHNICAL/03-persistent-local-ticket-storage.md`
 - `docs/TECHNICAL/04-driver-login-and-identity.md`
