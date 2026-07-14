@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.SharedPreferences
 import com.buspay.app.domain.Driver
 import com.buspay.app.domain.Shift
+import com.buspay.app.domain.StopRequest
 import com.buspay.app.domain.RouteProgress
 import com.buspay.app.domain.RouteProgressSource
 import com.buspay.app.domain.Ticket
@@ -66,6 +67,7 @@ class OfflineFirstRepository(context: Context) {
         preferences.edit()
             .remove(KEY_ACTIVE_SHIFT)
             .remove(KEY_ROUTE_PROGRESS)
+            .remove(KEY_STOP_REQUEST)
             .apply()
     }
 
@@ -80,6 +82,25 @@ class OfflineFirstRepository(context: Context) {
             ?.let(::JSONObject)
             ?.let(::routeProgressFromJson)
             ?.takeIf { it.shiftId == shiftId }
+    }
+
+    fun saveStopRequest(request: StopRequest) {
+        preferences.edit()
+            .putString(KEY_STOP_REQUEST, request.toJson().toString())
+            .apply()
+    }
+
+    fun loadStopRequest(shiftId: String): StopRequest? {
+        return preferences.getString(KEY_STOP_REQUEST, null)
+            ?.let(::JSONObject)
+            ?.let(::stopRequestFromJson)
+            ?.takeIf { it.shiftId == shiftId }
+    }
+
+    fun clearStopRequest() {
+        preferences.edit()
+            .remove(KEY_STOP_REQUEST)
+            .apply()
     }
 
     fun pendingTicketCount(): Int = loadTickets().count { !it.synced }
@@ -141,6 +162,13 @@ class OfflineFirstRepository(context: Context) {
             .put("source", source.name)
     }
 
+    private fun StopRequest.toJson(): JSONObject {
+        return JSONObject()
+            .put("shiftId", shiftId)
+            .put("requestedStopIndex", requestedStopIndex)
+            .put("requestedAtMillis", requestedAtMillis)
+    }
+
     private fun Ticket.toJson(): JSONObject {
         return JSONObject()
             .put("id", id)
@@ -160,6 +188,7 @@ class OfflineFirstRepository(context: Context) {
         const val KEY_SIGNED_IN_DRIVER = "signed_in_driver"
         const val KEY_TICKETS = "tickets"
         const val KEY_ROUTE_PROGRESS = "route_progress"
+        const val KEY_STOP_REQUEST = "stop_request"
         const val KEY_PRINTER_ADDRESS = "printer_address"
         const val KEY_PRINTER_NAME = "printer_name"
 
@@ -222,6 +251,14 @@ class OfflineFirstRepository(context: Context) {
                         RouteProgressSource.entries.firstOrNull { it.name == storedSource }
                     }
                     ?: RouteProgressSource.SHIFT_START
+            )
+        }
+
+        fun stopRequestFromJson(json: JSONObject): StopRequest {
+            return StopRequest(
+                shiftId = json.getString("shiftId"),
+                requestedStopIndex = json.optInt("requestedStopIndex", 0),
+                requestedAtMillis = json.optLong("requestedAtMillis", 0L)
             )
         }
     }

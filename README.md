@@ -20,6 +20,8 @@ It currently includes:
 - forward-only GPS route progress with persistent current-stop state
 - synchronized current/next-stop information on the driver console
 - dedicated passenger display with a hardware-free demo advance control
+- persistent next-stop requests synchronized across driver and passenger displays
+- automatic stop-request clearing on GPS or demo arrival
 - cash ticket count and cash total during an active shift
 - persistent local active shift storage
 - persistent local ticket storage for future sync
@@ -37,8 +39,8 @@ It currently includes:
 5. Ticket fare types and discounts - complete
 6. Receipt printing integration - complete
 7. GPS route progress and next-stop tracking - complete
-8. Stop-request button integration - next
-9. Server sync for shifts and tickets - planned
+8. Stop-request button integration - complete
+9. Server sync for shifts and tickets - next
 10. Admin reporting dashboard data contract - planned
 
 ## Documentation
@@ -52,6 +54,7 @@ Presentation documentation:
 - English: `docs/EN/05-ticket-fares-and-discounts.md`
 - English: `docs/EN/06-bluetooth-and-pdf-ticket-printing.md`
 - English: `docs/EN/07-gps-route-progress-and-passenger-display.md`
+- English: `docs/EN/08-stop-request-button-integration.md`
 - Albanian: `docs/SQ/01-themeli-i-projektit-dhe-skeleti-android.md`
 - Albanian: `docs/SQ/02-rrjedha-e-turnit-te-shoferit.md`
 - Albanian: `docs/SQ/03-ruajtja-lokale-e-biletave.md`
@@ -59,6 +62,7 @@ Presentation documentation:
 - Albanian: `docs/SQ/05-tarifat-e-biletave-dhe-zbritjet.md`
 - Albanian: `docs/SQ/06-printimi-i-biletave-me-bluetooth-dhe-pdf.md`
 - Albanian: `docs/SQ/07-perparimi-i-linjes-me-gps-dhe-ekrani-i-pasagjereve.md`
+- Albanian: `docs/SQ/08-integrimi-i-butonit-per-kerkese-ndalese.md`
 
 Technical documentation:
 
@@ -69,14 +73,15 @@ Technical documentation:
 - `docs/TECHNICAL/05-ticket-fares-and-discounts.md`
 - `docs/TECHNICAL/06-bluetooth-ticket-printing.md`
 - `docs/TECHNICAL/07-gps-route-progress-and-passenger-display.md`
+- `docs/TECHNICAL/08-stop-request-button-integration.md`
 
 ## Next build milestone
 
-Build stop-request button integration:
+Build server synchronization:
 
-1. Receive a stop request from the device integration boundary.
-2. Show the active request to the driver and passengers.
-3. Clear the request safely when the bus reaches the requested stop.
+1. Upload locally stored shifts and tickets idempotently.
+2. Preserve sales while the server or network is unavailable.
+3. Mark records synchronized only after server acknowledgement.
 
 #######################################
 
@@ -102,6 +107,8 @@ Aktualisht përfshin:
 - përparimin e linjës me GPS vetëm përpara dhe ruajtjen e ndalesës aktuale
 - ndalesën aktuale dhe të ardhshme të sinkronizuar në konsolën e shoferit
 - ekranin e veçantë për pasagjerë me avancim demo pa pajisje
+- kërkesat e ruajtura për ndalesën e ardhshme, të sinkronizuara në të dy ekranet
+- pastrimin automatik të kërkesës pas mbërritjes me GPS ose demo
 - numërimin e biletave me para të gatshme dhe totalin e arkës gjatë turnit aktiv
 - ruajtjen lokale të turnit aktiv
 - ruajtjen lokale të biletave për sinkronizim të ardhshëm
@@ -119,14 +126,14 @@ Aktualisht përfshin:
 5. Llojet e tarifave dhe zbritjet - përfunduar
 6. Integrimi i printimit të biletave - përfunduar
 7. Përparimi i linjës me GPS dhe ndalesa e radhës - përfunduar
-8. Integrimi i butonit për kërkesë ndalese - moduli i radhës
-9. Sinkronizimi i turneve dhe biletave me serverin - planifikuar
+8. Integrimi i butonit për kërkesë ndalese - përfunduar
+9. Sinkronizimi i turneve dhe biletave me serverin - moduli i radhës
 10. Kontrata e të dhënave për raportim në panelin administrativ - planifikuar
 
 ## Pika e ndërtimit tjetër
 
-Ndërtoni integrimin e butonit për kërkesë ndalese:
+Ndërtoni sinkronizimin me serverin:
 
-1. Pranojeni kërkesën për ndalesë nga kufiri i integrimit të pajisjes.
-2. Shfaqeni kërkesën aktive te shoferi dhe pasagjerët.
-3. Pastrojeni kërkesën në mënyrë të sigurt kur autobusi arrin në ndalesën e kërkuar.
+1. Ngarkoni turnet dhe biletat lokale në mënyrë idempotente.
+2. Ruani shitjet kur serveri ose rrjeti nuk është në dispozicion.
+3. Shënoni të dhënat si të sinkronizuara vetëm pas konfirmimit nga serveri.

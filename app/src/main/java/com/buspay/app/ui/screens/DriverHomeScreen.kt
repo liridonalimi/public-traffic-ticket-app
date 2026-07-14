@@ -93,6 +93,7 @@ fun DriverHomeScreen(viewModel: DriverShiftViewModel = viewModel()) {
         if (showPassengerDisplay && state.canOpenPassengerDisplay) {
             PassengerDisplay(
                 state = state,
+                onDemoStopRequest = viewModel::triggerDemoStopRequest,
                 onBackToDriverConsole = { showPassengerDisplay = false }
             )
             return@MaterialTheme
@@ -262,6 +263,19 @@ fun DriverHomeScreen(viewModel: DriverShiftViewModel = viewModel()) {
                                 ?: "Final stop reached"
                         )
                         state.gpsMessage?.let { Text(text = it) }
+                        state.requestedStop?.let { requestedStop ->
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Card(modifier = Modifier.fillMaxWidth()) {
+                                Column(modifier = Modifier.padding(16.dp)) {
+                                    Text(text = "STOP REQUESTED", fontWeight = FontWeight.Bold)
+                                    Text(text = requestedStop.name)
+                                }
+                            }
+                        }
+                        state.stopRequestMessage?.let { message ->
+                            Spacer(modifier = Modifier.height(6.dp))
+                            Text(text = message)
+                        }
                         Spacer(modifier = Modifier.height(8.dp))
                         if (!hasLocationPermission) {
                             Button(
@@ -285,6 +299,15 @@ fun DriverHomeScreen(viewModel: DriverShiftViewModel = viewModel()) {
                             modifier = Modifier.fillMaxWidth()
                         ) {
                             Text("Advance Stop (Demo)")
+                        }
+                        Spacer(modifier = Modifier.height(8.dp))
+                        OutlinedButton(
+                            onClick = viewModel::triggerDemoStopRequest,
+                            enabled = !state.routeStopStatus.isRouteComplete &&
+                                state.activeStopRequest == null,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text("Press Stop Button (Demo)")
                         }
                         Spacer(modifier = Modifier.height(8.dp))
                         Button(
@@ -417,6 +440,7 @@ fun DriverHomeScreen(viewModel: DriverShiftViewModel = viewModel()) {
 @Composable
 private fun PassengerDisplay(
     state: DriverShiftUiState,
+    onDemoStopRequest: () -> Unit,
     onBackToDriverConsole: () -> Unit
 ) {
     val route = state.passengerRoute
@@ -462,10 +486,49 @@ private fun PassengerDisplay(
                     Spacer(modifier = Modifier.height(16.dp))
                     Text(text = "SHIFT ENDED", fontWeight = FontWeight.Bold)
                 }
+                state.requestedStop?.let { requestedStop ->
+                    Spacer(modifier = Modifier.height(28.dp))
+                    Card(modifier = Modifier.fillMaxWidth()) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(20.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Text(
+                                text = "STOP REQUESTED",
+                                fontSize = 22.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Text(
+                                text = requestedStop.name,
+                                fontSize = 24.sp,
+                                textAlign = TextAlign.Center
+                            )
+                        }
+                    }
+                }
             }
 
-            OutlinedButton(onClick = onBackToDriverConsole) {
-                Text("Back to Driver Console")
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                if (state.isShiftActive &&
+                    !status.isRouteComplete &&
+                    state.activeStopRequest == null
+                ) {
+                    Button(
+                        onClick = onDemoStopRequest,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("Request Stop (Demo)")
+                    }
+                    Spacer(modifier = Modifier.height(12.dp))
+                }
+                OutlinedButton(onClick = onBackToDriverConsole) {
+                    Text("Back to Driver Console")
+                }
             }
         }
     }

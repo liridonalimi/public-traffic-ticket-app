@@ -5,6 +5,7 @@ import com.buspay.app.domain.RouteProgress
 import com.buspay.app.domain.RouteProgressSource
 import com.buspay.app.domain.Shift
 import com.buspay.app.domain.Stop
+import com.buspay.app.domain.StopRequest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -78,5 +79,19 @@ class DriverShiftUiStateTest {
 
         assertEquals("Active route", state.passengerRoute?.name)
         assertEquals("First stop", state.passengerRouteStopStatus.currentStop?.name)
+    }
+
+    @Test
+    fun `active stop request resolves requested stop for both displays`() {
+        val state = DriverShiftUiState(
+            selectedRoute = closedRoute,
+            activeStopRequest = StopRequest(
+                shiftId = "shift",
+                requestedStopIndex = 1,
+                requestedAtMillis = 1L
+            )
+        )
+
+        assertEquals("Last stop", state.requestedStop?.name)
     }
 }

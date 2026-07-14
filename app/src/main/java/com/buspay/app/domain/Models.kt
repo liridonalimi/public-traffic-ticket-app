@@ -52,6 +52,12 @@ data class RouteStopStatus(
     val isRouteComplete: Boolean
 )
 
+data class StopRequest(
+    val shiftId: String,
+    val requestedStopIndex: Int,
+    val requestedAtMillis: Long
+)
+
 data class FareType(
     val id: String,
     val name: String,
@@ -159,6 +165,11 @@ fun routeStopStatus(stops: List<Stop>, currentStopIndex: Int): RouteStopStatus {
         nextStop = stops.getOrNull(safeCurrentIndex + 1),
         isRouteComplete = safeCurrentIndex == stops.lastIndex
     )
+}
+
+fun isStopRequestReached(request: StopRequest, progress: RouteProgress): Boolean {
+    return request.shiftId == progress.shiftId &&
+        progress.currentStopIndex >= request.requestedStopIndex
 }
 
 private fun distanceMeters(

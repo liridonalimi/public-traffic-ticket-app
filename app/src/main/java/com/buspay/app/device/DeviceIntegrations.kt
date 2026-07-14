@@ -446,5 +446,22 @@ private fun formatAmountCents(cents: Int): String =
     "${cents / 100}.${(cents % 100).toString().padStart(2, '0')}"
 
 interface StopRequestInput {
-    fun listen(onStopRequested: () -> Unit)
+    fun start(onStopRequested: () -> Unit)
+    fun stop()
+}
+
+class DemoStopRequestInput : StopRequestInput {
+    private var listener: (() -> Unit)? = null
+
+    override fun start(onStopRequested: () -> Unit) {
+        listener = onStopRequested
+    }
+
+    override fun stop() {
+        listener = null
+    }
+
+    fun trigger() {
+        listener?.invoke()
+    }
 }

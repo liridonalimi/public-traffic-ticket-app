@@ -10,6 +10,7 @@ import com.buspay.app.data.DemoTransitData
 import com.buspay.app.data.OfflineFirstRepository
 import com.buspay.app.device.AndroidGpsTracker
 import com.buspay.app.device.BluetoothEscPosTicketPrinter
+import com.buspay.app.device.DemoStopRequestInput
 import com.buspay.app.device.PrintResult
 import com.buspay.app.device.PrintableTicket
 import com.buspay.app.device.PrinterDevice
@@ -23,9 +24,11 @@ import com.buspay.app.domain.RouteProgress
 import com.buspay.app.domain.RouteProgressSource
 import com.buspay.app.domain.RouteStopStatus
 import com.buspay.app.domain.Shift
+import com.buspay.app.domain.StopRequest
 import com.buspay.app.domain.Ticket
 import com.buspay.app.domain.TicketPrintStatus
 import com.buspay.app.domain.nearestForwardStopIndex
+import com.buspay.app.domain.isStopRequestReached
 import com.buspay.app.domain.routeStopStatus
 import com.buspay.app.domain.summarizeTicketsByFare
 import kotlinx.coroutines.launch
@@ -45,6 +48,8 @@ data class DriverShiftUiState(
     val routeProgress: RouteProgress? = null,
     val isGpsTracking: Boolean = false,
     val gpsMessage: String? = null,
+    val activeStopRequest: StopRequest? = null,
+    val stopRequestMessage: String? = null,
     val fareTypes: List<FareType> = emptyList(),
     val selectedFareType: FareType? = null,
     val pairedPrinters: List<PrinterDevice> = emptyList(),
@@ -75,6 +80,9 @@ data class DriverShiftUiState(
         currentStopIndex = passengerRouteProgress?.currentStopIndex ?: 0
     )
     val canOpenPassengerDisplay: Boolean = passengerRoute != null && passengerRouteProgress != null
+    val requestedStop = activeStopRequest?.let { request ->
+        selectedRoute?.stops?.getOrNull(request.requestedStopIndex)
+    }
     val ticketCount: Int = tickets.size
     val cashTotalCents: Int = tickets.sumOf { it.priceCents }
     val fareTypeSummaries = summarizeTicketsByFare(tickets, fareTypes)
@@ -88,9 +96,16 @@ class DriverShiftViewModel(application: Application) : AndroidViewModel(applicat
     private val bluetoothTicketPrinter = BluetoothEscPosTicketPrinter(application.applicationContext)
     private val pdfTicketPrinter = PdfTicketPrinter(application.applicationContext)
     private val gpsTracker = AndroidGpsTracker(application.applicationContext)
+    private val stopRequestInput = DemoStopRequestInput()
 
     var uiState by mutableStateOf(createInitialState())
         private set
+
+    init {
+        if (uiState.isShiftActive) {
+            stopRequestInput.start(::onStopRequested)
+        }
+    }
 
     fun selectDriver(driver: Driver) {
         if (uiState.isDriverSignedIn || uiState.isShiftActive) return
@@ -180,6 +195,8 @@ class DriverShiftViewModel(application: Application) : AndroidViewModel(applicat
             routeProgress = initialProgress,
             isGpsTracking = false,
             gpsMessage = "Allow location to update stops automatically, or use demo advance.",
+            activeStopRequest = null,
+            stopRequestMessage = null,
             tickets = emptyList(),
             pendingTicketCount = repository.pendingTicketCount(),
             lastClosedSummary = null,
@@ -189,6 +206,8 @@ class DriverShiftViewModel(application: Application) : AndroidViewModel(applicat
 
         repository.saveActiveShift(shift)
         repository.saveRouteProgress(initialProgress)
+        repository.clearStopRequest()
+        stopRequestInput.start(::onStopRequested)
     }
 
     fun startGpsTracking() {
@@ -235,6 +254,10 @@ class DriverShiftViewModel(application: Application) : AndroidViewModel(applicat
         )
     }
 
+    fun triggerDemoStopRequest() {
+        stopRequestInput.trigger()
+    }
+
     fun sellTicket() {
         val shift = uiState.activeShift ?: return
         val fareType = uiState.selectedFareType ?: return
@@ -273,6 +296,7 @@ class DriverShiftViewModel(application: Application) : AndroidViewModel(applicat
         }
 
         stopGpsTracking()
+        stopRequestInput.stop()
         val closedRoute = uiState.selectedRoute
         val closedRouteProgress = uiState.routeProgress
         repository.clearActiveShift()
@@ -282,6 +306,8 @@ class DriverShiftViewModel(application: Application) : AndroidViewModel(applicat
             routeProgress = null,
             isGpsTracking = false,
             gpsMessage = null,
+            activeStopRequest = null,
+            stopRequestMessage = null,
             tickets = emptyList(),
             pendingTicketCount = repository.pendingTicketCount(),
             lastClosedSummary = DriverShiftSummary(
@@ -307,6 +333,17 @@ class DriverShiftViewModel(application: Application) : AndroidViewModel(applicat
         val restoredProgress = restoredShift?.let { shift ->
             repository.loadRouteProgress(shift.id)
         }
+        val storedStopRequest = restoredShift?.let { shift ->
+            repository.loadStopRequest(shift.id)
+        }
+        val restoredStopRequest = storedStopRequest?.takeUnless { request ->
+            restoredProgress?.let { progress ->
+                isStopRequestReached(request, progress)
+            } == true
+        }
+        if (storedStopRequest != null && restoredStopRequest == null) {
+            repository.clearStopRequest()
+        }
 
         return DriverShiftUiState(
             availableDrivers = DemoTransitData.drivers,
@@ -330,6 +367,8 @@ class DriverShiftViewModel(application: Application) : AndroidViewModel(applicat
                 )
             },
             gpsMessage = restoredShift?.let { "Allow location to resume automatic stop tracking." },
+            activeStopRequest = restoredStopRequest,
+            stopRequestMessage = restoredStopRequest?.let { "Stop request restored" },
             fareTypes = DemoTransitData.fareTypes,
             selectedFareType = DemoTransitData.fareTypes.first(),
             pairedPrinters = pdfTicketPrinter.pairedPrinters(),
@@ -361,13 +400,63 @@ class DriverShiftViewModel(application: Application) : AndroidViewModel(applicat
         )
     }
 
+    private fun onStopRequested() {
+        val shift = uiState.activeShift ?: return
+        val route = uiState.selectedRoute ?: return
+        val progress = uiState.routeProgress ?: return
+        if (uiState.activeStopRequest != null) {
+            uiState = uiState.copy(stopRequestMessage = "A stop request is already active")
+            return
+        }
+        val requestedStopIndex = progress.currentStopIndex + 1
+        val requestedStop = route.stops.getOrNull(requestedStopIndex)
+        if (requestedStop == null) {
+            uiState = uiState.copy(stopRequestMessage = "No next stop is available")
+            return
+        }
+
+        val request = StopRequest(
+            shiftId = shift.id,
+            requestedStopIndex = requestedStopIndex,
+            requestedAtMillis = System.currentTimeMillis()
+        )
+        repository.saveStopRequest(request)
+        uiState = uiState.copy(
+            activeStopRequest = request,
+            stopRequestMessage = "Stop requested: ${requestedStop.name}"
+        )
+    }
+
     private fun updateRouteProgress(progress: RouteProgress, message: String) {
         repository.saveRouteProgress(progress)
-        uiState = uiState.copy(routeProgress = progress, gpsMessage = message)
+        val activeRequest = uiState.activeStopRequest
+        val requestReached = activeRequest?.let { request ->
+            isStopRequestReached(request, progress)
+        } == true
+        val requestedStopName = if (requestReached) {
+            activeRequest?.let { request ->
+                uiState.selectedRoute?.stops?.getOrNull(request.requestedStopIndex)?.name
+            }
+        } else {
+            null
+        }
+        if (requestReached) repository.clearStopRequest()
+
+        uiState = uiState.copy(
+            routeProgress = progress,
+            gpsMessage = message,
+            activeStopRequest = if (requestReached) null else activeRequest,
+            stopRequestMessage = if (requestReached) {
+                "Stop request cleared at ${requestedStopName ?: "requested stop"}"
+            } else {
+                uiState.stopRequestMessage
+            }
+        )
     }
 
     override fun onCleared() {
         gpsTracker.stop()
+        stopRequestInput.stop()
         super.onCleared()
     }
 
