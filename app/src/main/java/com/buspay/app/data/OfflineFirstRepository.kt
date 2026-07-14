@@ -74,6 +74,10 @@ class OfflineFirstRepository(context: Context) {
 
     fun pendingClosedShifts(): List<Shift> = loadClosedShifts().filter { !it.synced }
 
+    fun closedShiftsForReporting(): List<Shift> = loadClosedShifts()
+
+    fun ticketsForReporting(): List<Ticket> = loadTickets()
+
     fun pendingTicketsForSync(activeShiftId: String?): List<Ticket> {
         return loadTickets().filter { ticket ->
             !ticket.synced && ticket.shiftId != activeShiftId

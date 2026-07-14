@@ -17,6 +17,8 @@ import com.buspay.app.device.PrintableTicket
 import com.buspay.app.device.PrinterDevice
 import com.buspay.app.device.PdfTicketPrinter
 import com.buspay.app.domain.Bus
+import com.buspay.app.domain.AdminReport
+import com.buspay.app.domain.AdminReportFilter
 import com.buspay.app.domain.Driver
 import com.buspay.app.domain.DriverShiftSummary
 import com.buspay.app.domain.FareType
@@ -30,6 +32,7 @@ import com.buspay.app.domain.SyncResult
 import com.buspay.app.domain.Ticket
 import com.buspay.app.domain.TicketPrintStatus
 import com.buspay.app.domain.createSyncBatch
+import com.buspay.app.domain.buildAdminReport
 import com.buspay.app.domain.isStopRequestReached
 import com.buspay.app.domain.nearestForwardStopIndex
 import com.buspay.app.domain.routeStopStatus
@@ -67,6 +70,7 @@ data class DriverShiftUiState(
     val isSyncing: Boolean = false,
     val isDemoServerAvailable: Boolean = true,
     val syncMessage: String? = null,
+    val adminReport: AdminReport? = null,
     val lastClosedSummary: DriverShiftSummary? = null,
     val lastClosedRoute: Route? = null,
     val lastClosedRouteProgress: RouteProgress? = null
@@ -324,6 +328,10 @@ class DriverShiftViewModel(application: Application) : AndroidViewModel(applicat
         }
     }
 
+    fun refreshAdminReport(filter: AdminReportFilter = AdminReportFilter()) {
+        uiState = uiState.copy(adminReport = createAdminReport(filter = filter))
+    }
+
     fun sellTicket() {
         val shift = uiState.activeShift ?: return
         val fareType = uiState.selectedFareType ?: return
@@ -384,6 +392,7 @@ class DriverShiftViewModel(application: Application) : AndroidViewModel(applicat
             pendingShiftCount = repository.pendingShiftCount(),
             syncableTicketCount = repository.pendingTicketsForSync(activeShiftId = null).size,
             syncMessage = "Shift closed: ${uiState.ticketCount} ticket(s) ready for sync",
+            adminReport = createAdminReport(activeShiftId = null),
             lastClosedSummary = DriverShiftSummary(
                 ticketCount = uiState.ticketCount,
                 cashTotalCents = uiState.cashTotalCents,
@@ -450,7 +459,8 @@ class DriverShiftViewModel(application: Application) : AndroidViewModel(applicat
             tickets = restoredTickets,
             pendingTicketCount = repository.pendingTicketCount(),
             pendingShiftCount = repository.pendingShiftCount(),
-            syncableTicketCount = repository.pendingTicketsForSync(restoredShift?.id).size
+            syncableTicketCount = repository.pendingTicketsForSync(restoredShift?.id).size,
+            adminReport = createAdminReport(activeShiftId = restoredShift?.id)
         )
     }
 
@@ -537,7 +547,26 @@ class DriverShiftViewModel(application: Application) : AndroidViewModel(applicat
             syncableTicketCount = repository.pendingTicketsForSync(uiState.activeShift?.id).size,
             isSyncing = false,
             isDemoServerAvailable = syncClient.isAvailable,
-            syncMessage = message
+            syncMessage = message,
+            adminReport = createAdminReport()
+        )
+    }
+
+    private fun createAdminReport(
+        filter: AdminReportFilter = AdminReportFilter(),
+        activeShiftId: String? = uiState.activeShift?.id
+    ): AdminReport {
+        val reportingTickets = repository.ticketsForReporting().filterNot { ticket ->
+            ticket.shiftId == activeShiftId
+        }
+        return buildAdminReport(
+            closedShifts = repository.closedShiftsForReporting(),
+            tickets = reportingTickets,
+            drivers = DemoTransitData.drivers,
+            buses = DemoTransitData.buses,
+            routes = DemoTransitData.routes,
+            fareTypes = DemoTransitData.fareTypes,
+            filter = filter
         )
     }
 

@@ -24,6 +24,8 @@ It currently includes:
 - automatic stop-request clearing on GPS or demo arrival
 - durable closed-shift storage and acknowledged-only offline sync
 - demo server controls for safe failure and retry validation
+- versioned admin reporting contract with driver, shift, ticket, fare, cash, and sync totals
+- in-app admin report preview with legacy-data quality warnings
 - cash ticket count and cash total during an active shift
 - persistent local active shift storage
 - persistent local ticket storage for future sync
@@ -43,7 +45,7 @@ It currently includes:
 7. GPS route progress and next-stop tracking - complete
 8. Stop-request button integration - complete
 9. Server sync for shifts and tickets - complete
-10. Admin reporting dashboard data contract - next
+10. Admin reporting dashboard data contract - complete
 
 ## Documentation
 
@@ -58,6 +60,7 @@ Presentation documentation:
 - English: `docs/EN/07-gps-route-progress-and-passenger-display.md`
 - English: `docs/EN/08-stop-request-button-integration.md`
 - English: `docs/EN/09-offline-server-sync.md`
+- English: `docs/EN/10-admin-reporting-data-contract.md`
 - Albanian: `docs/SQ/01-themeli-i-projektit-dhe-skeleti-android.md`
 - Albanian: `docs/SQ/02-rrjedha-e-turnit-te-shoferit.md`
 - Albanian: `docs/SQ/03-ruajtja-lokale-e-biletave.md`
@@ -67,6 +70,7 @@ Presentation documentation:
 - Albanian: `docs/SQ/07-perparimi-i-linjes-me-gps-dhe-ekrani-i-pasagjereve.md`
 - Albanian: `docs/SQ/08-integrimi-i-butonit-per-kerkese-ndalese.md`
 - Albanian: `docs/SQ/09-sinkronizimi-offline-me-serverin.md`
+- Albanian: `docs/SQ/10-kontrata-e-raportimit-administrativ.md`
 
 Technical documentation:
 
@@ -79,14 +83,15 @@ Technical documentation:
 - `docs/TECHNICAL/07-gps-route-progress-and-passenger-display.md`
 - `docs/TECHNICAL/08-stop-request-button-integration.md`
 - `docs/TECHNICAL/09-offline-server-sync.md`
+- `docs/TECHNICAL/10-admin-reporting-data-contract.md`
 
 ## Next build milestone
 
-Define the admin reporting data contract:
+Begin production integration:
 
-1. Define shift, ticket, fare, and cash reporting fields.
-2. Define aggregation and reconciliation rules.
-3. Make synchronization visibility available to reporting consumers.
+1. Connect an authenticated HTTPS sync service and database.
+2. Build the web dashboard against reporting contract version 1.
+3. Add production security, privacy, audit, export, and deployment controls.
 
 #######################################
 
@@ -116,6 +121,8 @@ Aktualisht përfshin:
 - pastrimin automatik të kërkesës pas mbërritjes me GPS ose demo
 - ruajtjen e turneve të përfunduara dhe sinkronizimin vetëm pas konfirmimit
 - kontrollet e serverit demo për validimin e dështimit dhe riprovimit
+- kontratën e versionuar të raportimit me totalet e shoferëve, turneve, biletave, tarifave, arkës dhe sinkronizimit
+- pamjen administrative në aplikacion me paralajmërime për cilësinë e të dhënave të vjetra
 - numërimin e biletave me para të gatshme dhe totalin e arkës gjatë turnit aktiv
 - ruajtjen lokale të turnit aktiv
 - ruajtjen lokale të biletave për sinkronizim të ardhshëm
@@ -135,12 +142,12 @@ Aktualisht përfshin:
 7. Përparimi i linjës me GPS dhe ndalesa e radhës - përfunduar
 8. Integrimi i butonit për kërkesë ndalese - përfunduar
 9. Sinkronizimi i turneve dhe biletave me serverin - përfunduar
-10. Kontrata e të dhënave për raportim në panelin administrativ - moduli i radhës
+10. Kontrata e të dhënave për raportim në panelin administrativ - përfunduar
 
 ## Pika e ndërtimit tjetër
 
-Përcaktoni kontratën e raportimit administrativ:
+Filloni integrimin në prodhim:
 
-1. Përcaktoni fushat për turnet, biletat, tarifat dhe arkën.
-2. Përcaktoni rregullat e agregimit dhe barazimit.
-3. Bëjeni gjendjen e sinkronizimit të dukshme për raportim.
+1. Lidheni shërbimin HTTPS të autentikuar dhe bazën e të dhënave.
+2. Ndërtojeni panelin web sipas versionit 1 të kontratës.
+3. Shtoni sigurinë, privatësinë, auditimin, eksportin dhe vendosjen në prodhim.

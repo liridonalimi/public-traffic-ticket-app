@@ -47,16 +47,20 @@ import androidx.core.content.FileProvider
 import com.buspay.app.device.PdfTicketPrinter
 import com.buspay.app.device.PrinterDevice
 import com.buspay.app.domain.Bus
+import com.buspay.app.domain.AdminReport
 import com.buspay.app.domain.Driver
 import com.buspay.app.domain.FareType
 import com.buspay.app.domain.Route
 import java.io.File
+import java.text.DateFormat
+import java.util.Date
 
 @Composable
 fun DriverHomeScreen(viewModel: DriverShiftViewModel = viewModel()) {
     val state = viewModel.uiState
     val context = LocalContext.current
     var showPassengerDisplay by remember { mutableStateOf(false) }
+    var showAdminReport by remember { mutableStateOf(false) }
     var hasBluetoothPermission by remember {
         mutableStateOf(hasBluetoothPrinterPermission(context))
     }
@@ -90,6 +94,15 @@ fun DriverHomeScreen(viewModel: DriverShiftViewModel = viewModel()) {
     }
 
     MaterialTheme {
+        if (showAdminReport) {
+            AdminReportScreen(
+                report = state.adminReport,
+                onRefresh = { viewModel.refreshAdminReport() },
+                onBackToDriverConsole = { showAdminReport = false }
+            )
+            return@MaterialTheme
+        }
+
         if (showPassengerDisplay && state.canOpenPassengerDisplay) {
             PassengerDisplay(
                 state = state,
@@ -429,6 +442,16 @@ fun DriverHomeScreen(viewModel: DriverShiftViewModel = viewModel()) {
                             Text(if (state.isSyncing) "Syncing…" else "Sync Now")
                         }
                     }
+                    Spacer(modifier = Modifier.height(8.dp))
+                    OutlinedButton(
+                        onClick = {
+                            viewModel.refreshAdminReport()
+                            showAdminReport = true
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("Open Admin Report Preview")
+                    }
 
                     state.lastClosedSummary?.let { summary ->
                         Spacer(modifier = Modifier.height(20.dp))
@@ -478,6 +501,151 @@ fun DriverHomeScreen(viewModel: DriverShiftViewModel = viewModel()) {
                         Text(if (state.isPrinting) "Printing…" else "Sell Ticket")
                     }
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun AdminReportScreen(
+    report: AdminReport?,
+    onRefresh: () -> Unit,
+    onBackToDriverConsole: () -> Unit
+) {
+    Surface(modifier = Modifier.fillMaxSize()) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+                .padding(24.dp)
+        ) {
+            Text(
+                text = "Admin Reporting Preview",
+                fontSize = 28.sp,
+                fontWeight = FontWeight.Bold
+            )
+            if (report == null) {
+                Spacer(modifier = Modifier.height(16.dp))
+                Text("No report is available")
+            } else {
+                Text(
+                    "Contract v${report.contractVersion} • " +
+                        formatReportDateTime(report.generatedAtMillis)
+                )
+                Spacer(modifier = Modifier.height(20.dp))
+
+                Card(modifier = Modifier.fillMaxWidth()) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Text("Overall totals", fontWeight = FontWeight.Bold)
+                        Text("Drivers: ${report.totals.driverCount}")
+                        Text("Closed shifts: ${report.totals.shiftCount}")
+                        Text("Tickets: ${report.totals.ticketCount}")
+                        Text("Cash: ${formatEuroCents(report.totals.cashTotalCents)}")
+                        Text(
+                            "Sync: ${report.totals.syncedShiftCount} synced, " +
+                                "${report.totals.partiallySyncedShiftCount} partial, " +
+                                "${report.totals.pendingShiftCount} pending"
+                        )
+                        if (report.totals.fareTypeSummaries.isNotEmpty()) {
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text("Fares", fontWeight = FontWeight.Bold)
+                            report.totals.fareTypeSummaries.forEach { fare ->
+                                Text(
+                                    "${fare.fareName}: ${fare.ticketCount} / " +
+                                        formatEuroCents(fare.cashTotalCents)
+                                )
+                            }
+                        }
+                    }
+                }
+
+                val quality = report.dataQuality
+                if (quality.unmatchedTicketCount > 0 ||
+                    quality.unknownDriverShiftCount > 0 ||
+                    quality.unknownBusShiftCount > 0 ||
+                    quality.unknownRouteShiftCount > 0
+                ) {
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Card(modifier = Modifier.fillMaxWidth()) {
+                        Column(modifier = Modifier.padding(16.dp)) {
+                            Text("Data quality", fontWeight = FontWeight.Bold)
+                            Text(
+                                "Legacy unmatched tickets: ${quality.unmatchedTicketCount} / " +
+                                    formatEuroCents(quality.unmatchedTicketCashCents)
+                            )
+                            Text("Unknown-driver shifts: ${quality.unknownDriverShiftCount}")
+                            Text("Unknown-bus shifts: ${quality.unknownBusShiftCount}")
+                            Text("Unknown-route shifts: ${quality.unknownRouteShiftCount}")
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(20.dp))
+                Text("Drivers", fontSize = 22.sp, fontWeight = FontWeight.Bold)
+                if (report.drivers.isEmpty()) Text("No closed shifts in this report")
+                report.drivers.forEach { driver ->
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Card(modifier = Modifier.fillMaxWidth()) {
+                        Column(modifier = Modifier.padding(16.dp)) {
+                            Text(driver.driverName, fontWeight = FontWeight.Bold)
+                            Text("ID: ${driver.driverId}")
+                            Text("Shifts: ${driver.shiftCount}")
+                            Text("Tickets: ${driver.ticketCount}")
+                            Text("Cash: ${formatEuroCents(driver.cashTotalCents)}")
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(20.dp))
+                Text("Shift details", fontSize = 22.sp, fontWeight = FontWeight.Bold)
+                report.shifts.forEach { shift ->
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Card(modifier = Modifier.fillMaxWidth()) {
+                        Column(modifier = Modifier.padding(16.dp)) {
+                            Text(shift.driverName, fontWeight = FontWeight.Bold)
+                            Text("Shift: ${shift.shiftId}")
+                            Text("Bus: ${shift.busPlateNumber}")
+                            Text("Route: ${shift.routeName}")
+                            Text("Start: ${formatReportDateTime(shift.startedAtMillis)}")
+                            Text("End: ${formatReportDateTime(shift.endedAtMillis)}")
+                            Text("Duration: ${formatDuration(shift.durationMillis)}")
+                            Text("Sync: ${shift.syncStatus.name.replace('_', ' ')}")
+                            Text(
+                                "Tickets: ${shift.ticketCount} / " +
+                                    formatEuroCents(shift.cashTotalCents)
+                            )
+                            shift.fareTypeSummaries.forEach { fare ->
+                                Text(
+                                    "${fare.fareName}: ${fare.ticketCount} / " +
+                                        formatEuroCents(fare.cashTotalCents)
+                                )
+                            }
+                            if (shift.tickets.isNotEmpty()) {
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Text("Ticket records", fontWeight = FontWeight.Bold)
+                                shift.tickets.forEach { ticket ->
+                                    Text(
+                                        "${ticket.ticketId.takeLast(8)} • ${ticket.fareName} • " +
+                                            formatEuroCents(ticket.priceCents) +
+                                            if (ticket.synced) " • synced" else " • pending"
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(24.dp))
+            Button(onClick = onRefresh, modifier = Modifier.fillMaxWidth()) {
+                Text("Refresh Report")
+            }
+            Spacer(modifier = Modifier.height(8.dp))
+            OutlinedButton(
+                onClick = onBackToDriverConsole,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text("Back to Driver Console")
             }
         }
     }
@@ -626,6 +794,18 @@ private fun formatEuroCents(cents: Int): String {
     val euros = cents / 100
     val remainder = cents % 100
     return "EUR $euros.${remainder.toString().padStart(2, '0')}"
+}
+
+private fun formatReportDateTime(timestampMillis: Long): String {
+    return DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT)
+        .format(Date(timestampMillis))
+}
+
+private fun formatDuration(durationMillis: Long): String {
+    val totalMinutes = durationMillis / 60_000L
+    val hours = totalMinutes / 60L
+    val minutes = totalMinutes % 60L
+    return if (hours > 0) "${hours}h ${minutes}m" else "${minutes}m"
 }
 
 private fun hasBluetoothPrinterPermission(context: Context): Boolean {
