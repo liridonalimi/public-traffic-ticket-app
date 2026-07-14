@@ -22,6 +22,8 @@ It currently includes:
 - dedicated passenger display with a hardware-free demo advance control
 - persistent next-stop requests synchronized across driver and passenger displays
 - automatic stop-request clearing on GPS or demo arrival
+- durable closed-shift storage and acknowledged-only offline sync
+- demo server controls for safe failure and retry validation
 - cash ticket count and cash total during an active shift
 - persistent local active shift storage
 - persistent local ticket storage for future sync
@@ -40,8 +42,8 @@ It currently includes:
 6. Receipt printing integration - complete
 7. GPS route progress and next-stop tracking - complete
 8. Stop-request button integration - complete
-9. Server sync for shifts and tickets - next
-10. Admin reporting dashboard data contract - planned
+9. Server sync for shifts and tickets - complete
+10. Admin reporting dashboard data contract - next
 
 ## Documentation
 
@@ -55,6 +57,7 @@ Presentation documentation:
 - English: `docs/EN/06-bluetooth-and-pdf-ticket-printing.md`
 - English: `docs/EN/07-gps-route-progress-and-passenger-display.md`
 - English: `docs/EN/08-stop-request-button-integration.md`
+- English: `docs/EN/09-offline-server-sync.md`
 - Albanian: `docs/SQ/01-themeli-i-projektit-dhe-skeleti-android.md`
 - Albanian: `docs/SQ/02-rrjedha-e-turnit-te-shoferit.md`
 - Albanian: `docs/SQ/03-ruajtja-lokale-e-biletave.md`
@@ -63,6 +66,7 @@ Presentation documentation:
 - Albanian: `docs/SQ/06-printimi-i-biletave-me-bluetooth-dhe-pdf.md`
 - Albanian: `docs/SQ/07-perparimi-i-linjes-me-gps-dhe-ekrani-i-pasagjereve.md`
 - Albanian: `docs/SQ/08-integrimi-i-butonit-per-kerkese-ndalese.md`
+- Albanian: `docs/SQ/09-sinkronizimi-offline-me-serverin.md`
 
 Technical documentation:
 
@@ -74,14 +78,15 @@ Technical documentation:
 - `docs/TECHNICAL/06-bluetooth-ticket-printing.md`
 - `docs/TECHNICAL/07-gps-route-progress-and-passenger-display.md`
 - `docs/TECHNICAL/08-stop-request-button-integration.md`
+- `docs/TECHNICAL/09-offline-server-sync.md`
 
 ## Next build milestone
 
-Build server synchronization:
+Define the admin reporting data contract:
 
-1. Upload locally stored shifts and tickets idempotently.
-2. Preserve sales while the server or network is unavailable.
-3. Mark records synchronized only after server acknowledgement.
+1. Define shift, ticket, fare, and cash reporting fields.
+2. Define aggregation and reconciliation rules.
+3. Make synchronization visibility available to reporting consumers.
 
 #######################################
 
@@ -109,6 +114,8 @@ Aktualisht përfshin:
 - ekranin e veçantë për pasagjerë me avancim demo pa pajisje
 - kërkesat e ruajtura për ndalesën e ardhshme, të sinkronizuara në të dy ekranet
 - pastrimin automatik të kërkesës pas mbërritjes me GPS ose demo
+- ruajtjen e turneve të përfunduara dhe sinkronizimin vetëm pas konfirmimit
+- kontrollet e serverit demo për validimin e dështimit dhe riprovimit
 - numërimin e biletave me para të gatshme dhe totalin e arkës gjatë turnit aktiv
 - ruajtjen lokale të turnit aktiv
 - ruajtjen lokale të biletave për sinkronizim të ardhshëm
@@ -127,13 +134,13 @@ Aktualisht përfshin:
 6. Integrimi i printimit të biletave - përfunduar
 7. Përparimi i linjës me GPS dhe ndalesa e radhës - përfunduar
 8. Integrimi i butonit për kërkesë ndalese - përfunduar
-9. Sinkronizimi i turneve dhe biletave me serverin - moduli i radhës
-10. Kontrata e të dhënave për raportim në panelin administrativ - planifikuar
+9. Sinkronizimi i turneve dhe biletave me serverin - përfunduar
+10. Kontrata e të dhënave për raportim në panelin administrativ - moduli i radhës
 
 ## Pika e ndërtimit tjetër
 
-Ndërtoni sinkronizimin me serverin:
+Përcaktoni kontratën e raportimit administrativ:
 
-1. Ngarkoni turnet dhe biletat lokale në mënyrë idempotente.
-2. Ruani shitjet kur serveri ose rrjeti nuk është në dispozicion.
-3. Shënoni të dhënat si të sinkronizuara vetëm pas konfirmimit nga serveri.
+1. Përcaktoni fushat për turnet, biletat, tarifat dhe arkën.
+2. Përcaktoni rregullat e agregimit dhe barazimit.
+3. Bëjeni gjendjen e sinkronizimit të dukshme për raportim.

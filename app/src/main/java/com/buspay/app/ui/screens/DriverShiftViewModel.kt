@@ -7,6 +7,7 @@ import androidx.compose.runtime.setValue
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.buspay.app.data.DemoTransitData
+import com.buspay.app.data.DemoTransitSyncClient
 import com.buspay.app.data.OfflineFirstRepository
 import com.buspay.app.device.AndroidGpsTracker
 import com.buspay.app.device.BluetoothEscPosTicketPrinter
@@ -25,10 +26,12 @@ import com.buspay.app.domain.RouteProgressSource
 import com.buspay.app.domain.RouteStopStatus
 import com.buspay.app.domain.Shift
 import com.buspay.app.domain.StopRequest
+import com.buspay.app.domain.SyncResult
 import com.buspay.app.domain.Ticket
 import com.buspay.app.domain.TicketPrintStatus
-import com.buspay.app.domain.nearestForwardStopIndex
+import com.buspay.app.domain.createSyncBatch
 import com.buspay.app.domain.isStopRequestReached
+import com.buspay.app.domain.nearestForwardStopIndex
 import com.buspay.app.domain.routeStopStatus
 import com.buspay.app.domain.summarizeTicketsByFare
 import kotlinx.coroutines.launch
@@ -59,6 +62,11 @@ data class DriverShiftUiState(
     val lastPdfPath: String? = null,
     val tickets: List<Ticket> = emptyList(),
     val pendingTicketCount: Int = 0,
+    val pendingShiftCount: Int = 0,
+    val syncableTicketCount: Int = 0,
+    val isSyncing: Boolean = false,
+    val isDemoServerAvailable: Boolean = true,
+    val syncMessage: String? = null,
     val lastClosedSummary: DriverShiftSummary? = null,
     val lastClosedRoute: Route? = null,
     val lastClosedRouteProgress: RouteProgress? = null
@@ -97,6 +105,7 @@ class DriverShiftViewModel(application: Application) : AndroidViewModel(applicat
     private val pdfTicketPrinter = PdfTicketPrinter(application.applicationContext)
     private val gpsTracker = AndroidGpsTracker(application.applicationContext)
     private val stopRequestInput = DemoStopRequestInput()
+    private val syncClient = DemoTransitSyncClient()
 
     var uiState by mutableStateOf(createInitialState())
         private set
@@ -199,6 +208,9 @@ class DriverShiftViewModel(application: Application) : AndroidViewModel(applicat
             stopRequestMessage = null,
             tickets = emptyList(),
             pendingTicketCount = repository.pendingTicketCount(),
+            pendingShiftCount = repository.pendingShiftCount(),
+            syncableTicketCount = repository.pendingTicketsForSync(shift.id).size,
+            syncMessage = null,
             lastClosedSummary = null,
             lastClosedRoute = null,
             lastClosedRouteProgress = null
@@ -258,6 +270,60 @@ class DriverShiftViewModel(application: Application) : AndroidViewModel(applicat
         stopRequestInput.trigger()
     }
 
+    fun toggleDemoServerAvailability() {
+        if (uiState.isSyncing) return
+        syncClient.isAvailable = !syncClient.isAvailable
+        uiState = uiState.copy(
+            isDemoServerAvailable = syncClient.isAvailable,
+            syncMessage = if (syncClient.isAvailable) {
+                "Demo server is online"
+            } else {
+                "Demo server is offline"
+            }
+        )
+    }
+
+    fun syncPendingData() {
+        if (uiState.isSyncing) return
+        val shifts = repository.pendingClosedShifts()
+        val tickets = repository.pendingTicketsForSync(uiState.activeShift?.id)
+        if (shifts.isEmpty() && tickets.isEmpty()) {
+            uiState = uiState.copy(
+                syncMessage = if (uiState.isShiftActive && uiState.pendingTicketCount > 0) {
+                    "Active-shift tickets will be available after the shift ends"
+                } else {
+                    "No data is waiting for sync"
+                }
+            )
+            return
+        }
+
+        val batch = createSyncBatch(shifts, tickets)
+        uiState = uiState.copy(
+            isSyncing = true,
+            syncMessage = "Sending ${shifts.size} shift(s) and ${tickets.size} ticket(s)…"
+        )
+        viewModelScope.launch {
+            when (val result = syncClient.sync(batch)) {
+                is SyncResult.Success -> {
+                    repository.markSyncAcknowledged(
+                        shiftIds = result.acknowledgement.acknowledgedShiftIds,
+                        ticketIds = result.acknowledgement.acknowledgedTicketIds
+                    )
+                    refreshSyncState(
+                        message = "Sync complete: " +
+                            "${result.acknowledgement.acknowledgedShiftIds.size} shift(s), " +
+                            "${result.acknowledgement.acknowledgedTicketIds.size} ticket(s)"
+                    )
+                }
+
+                is SyncResult.Failure -> {
+                    refreshSyncState(message = "Sync failed: ${result.message}")
+                }
+            }
+        }
+    }
+
     fun sellTicket() {
         val shift = uiState.activeShift ?: return
         val fareType = uiState.selectedFareType ?: return
@@ -299,6 +365,11 @@ class DriverShiftViewModel(application: Application) : AndroidViewModel(applicat
         stopRequestInput.stop()
         val closedRoute = uiState.selectedRoute
         val closedRouteProgress = uiState.routeProgress
+        val closedShift = uiState.activeShift?.copy(
+            endedAtMillis = System.currentTimeMillis(),
+            synced = false
+        )
+        closedShift?.let(repository::saveClosedShift)
         repository.clearActiveShift()
 
         uiState = uiState.copy(
@@ -310,6 +381,9 @@ class DriverShiftViewModel(application: Application) : AndroidViewModel(applicat
             stopRequestMessage = null,
             tickets = emptyList(),
             pendingTicketCount = repository.pendingTicketCount(),
+            pendingShiftCount = repository.pendingShiftCount(),
+            syncableTicketCount = repository.pendingTicketsForSync(activeShiftId = null).size,
+            syncMessage = "Shift closed: ${uiState.ticketCount} ticket(s) ready for sync",
             lastClosedSummary = DriverShiftSummary(
                 ticketCount = uiState.ticketCount,
                 cashTotalCents = uiState.cashTotalCents,
@@ -374,7 +448,9 @@ class DriverShiftViewModel(application: Application) : AndroidViewModel(applicat
             pairedPrinters = pdfTicketPrinter.pairedPrinters(),
             selectedPrinter = repository.loadPrinter() ?: PdfTicketPrinter.TEST_DEVICE,
             tickets = restoredTickets,
-            pendingTicketCount = repository.pendingTicketCount()
+            pendingTicketCount = repository.pendingTicketCount(),
+            pendingShiftCount = repository.pendingShiftCount(),
+            syncableTicketCount = repository.pendingTicketsForSync(restoredShift?.id).size
         )
     }
 
@@ -451,6 +527,17 @@ class DriverShiftViewModel(application: Application) : AndroidViewModel(applicat
             } else {
                 uiState.stopRequestMessage
             }
+        )
+    }
+
+    private fun refreshSyncState(message: String) {
+        uiState = uiState.copy(
+            pendingTicketCount = repository.pendingTicketCount(),
+            pendingShiftCount = repository.pendingShiftCount(),
+            syncableTicketCount = repository.pendingTicketsForSync(uiState.activeShift?.id).size,
+            isSyncing = false,
+            isDemoServerAvailable = syncClient.isAvailable,
+            syncMessage = message
         )
     }
 

@@ -30,7 +30,8 @@ data class Shift(
     val busId: String,
     val routeId: String,
     val startedAtMillis: Long,
-    val endedAtMillis: Long? = null
+    val endedAtMillis: Long? = null,
+    val synced: Boolean = false
 )
 
 enum class RouteProgressSource {

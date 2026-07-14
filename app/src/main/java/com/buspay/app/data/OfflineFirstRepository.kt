@@ -9,6 +9,8 @@ import com.buspay.app.domain.RouteProgress
 import com.buspay.app.domain.RouteProgressSource
 import com.buspay.app.domain.Ticket
 import com.buspay.app.domain.TicketPrintStatus
+import com.buspay.app.domain.acknowledgeShifts
+import com.buspay.app.domain.acknowledgeTickets
 import com.buspay.app.device.PrinterDevice
 import org.json.JSONArray
 import org.json.JSONObject
@@ -63,6 +65,26 @@ class OfflineFirstRepository(context: Context) {
         return loadTickets().filter { it.shiftId == shiftId }
     }
 
+    fun saveClosedShift(shift: Shift) {
+        require(shift.endedAtMillis != null) { "Only closed shifts can enter sync history" }
+        val shifts = loadClosedShifts()
+            .filterNot { it.id == shift.id } + shift
+        saveClosedShifts(shifts)
+    }
+
+    fun pendingClosedShifts(): List<Shift> = loadClosedShifts().filter { !it.synced }
+
+    fun pendingTicketsForSync(activeShiftId: String?): List<Ticket> {
+        return loadTickets().filter { ticket ->
+            !ticket.synced && ticket.shiftId != activeShiftId
+        }
+    }
+
+    fun markSyncAcknowledged(shiftIds: Set<String>, ticketIds: Set<String>) {
+        saveClosedShifts(acknowledgeShifts(loadClosedShifts(), shiftIds))
+        saveTickets(acknowledgeTickets(loadTickets(), ticketIds))
+    }
+
     fun clearActiveShift() {
         preferences.edit()
             .remove(KEY_ACTIVE_SHIFT)
@@ -105,6 +127,8 @@ class OfflineFirstRepository(context: Context) {
 
     fun pendingTicketCount(): Int = loadTickets().count { !it.synced }
 
+    fun pendingShiftCount(): Int = loadClosedShifts().count { !it.synced }
+
     fun savePrinter(printer: PrinterDevice) {
         preferences.edit()
             .putString(KEY_PRINTER_ADDRESS, printer.address)
@@ -138,6 +162,25 @@ class OfflineFirstRepository(context: Context) {
             .apply()
     }
 
+    private fun loadClosedShifts(): List<Shift> {
+        val rawShifts = preferences.getString(KEY_CLOSED_SHIFTS, null) ?: return emptyList()
+        val shiftArray = JSONArray(rawShifts)
+
+        return buildList {
+            for (index in 0 until shiftArray.length()) {
+                add(shiftFromJson(shiftArray.getJSONObject(index)))
+            }
+        }
+    }
+
+    private fun saveClosedShifts(shifts: List<Shift>) {
+        val shiftArray = JSONArray()
+        shifts.forEach { shiftArray.put(it.toJson()) }
+        preferences.edit()
+            .putString(KEY_CLOSED_SHIFTS, shiftArray.toString())
+            .apply()
+    }
+
     private fun Shift.toJson(): JSONObject {
         return JSONObject()
             .put("id", id)
@@ -146,6 +189,7 @@ class OfflineFirstRepository(context: Context) {
             .put("routeId", routeId)
             .put("startedAtMillis", startedAtMillis)
             .put("endedAtMillis", endedAtMillis)
+            .put("synced", synced)
     }
 
     private fun Driver.toJson(): JSONObject {
@@ -187,6 +231,7 @@ class OfflineFirstRepository(context: Context) {
         const val KEY_ACTIVE_SHIFT = "active_shift"
         const val KEY_SIGNED_IN_DRIVER = "signed_in_driver"
         const val KEY_TICKETS = "tickets"
+        const val KEY_CLOSED_SHIFTS = "closed_shifts"
         const val KEY_ROUTE_PROGRESS = "route_progress"
         const val KEY_STOP_REQUEST = "stop_request"
         const val KEY_PRINTER_ADDRESS = "printer_address"
@@ -210,7 +255,8 @@ class OfflineFirstRepository(context: Context) {
                     null
                 } else {
                     json.getLong("endedAtMillis")
-                }
+                },
+                synced = json.optBoolean("synced", false)
             )
         }
 

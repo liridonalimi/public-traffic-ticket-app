@@ -382,7 +382,53 @@ fun DriverHomeScreen(viewModel: DriverShiftViewModel = viewModel()) {
                     Spacer(modifier = Modifier.height(20.dp))
 
                     Text(text = "Total waiting for sync", fontWeight = FontWeight.Bold)
-                    Text(text = "${state.pendingTicketCount} total tickets saved locally")
+                    Text(text = "${state.pendingShiftCount} closed shift(s)")
+                    Text(text = "${state.pendingTicketCount} ticket(s) saved locally")
+                    if (state.isShiftActive &&
+                        state.pendingTicketCount > state.syncableTicketCount
+                    ) {
+                        Text(
+                            text = "Current-shift tickets wait until shift closure",
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = if (state.isDemoServerAvailable) {
+                            "Demo server: online"
+                        } else {
+                            "Demo server: offline"
+                        }
+                    )
+                    state.syncMessage?.let { message ->
+                        Text(text = message)
+                    }
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        OutlinedButton(
+                            onClick = viewModel::toggleDemoServerAvailability,
+                            enabled = !state.isSyncing,
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Text(
+                                if (state.isDemoServerAvailable) {
+                                    "Go Offline"
+                                } else {
+                                    "Go Online"
+                                }
+                            )
+                        }
+                        Button(
+                            onClick = viewModel::syncPendingData,
+                            enabled = !state.isSyncing,
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Text(if (state.isSyncing) "Syncing…" else "Sync Now")
+                        }
+                    }
 
                     state.lastClosedSummary?.let { summary ->
                         Spacer(modifier = Modifier.height(20.dp))
