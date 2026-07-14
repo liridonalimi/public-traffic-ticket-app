@@ -6,7 +6,9 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.buspay.app.data.DemoTransitData
 import com.buspay.app.data.OfflineFirstRepository
+import com.buspay.app.device.AndroidGpsTracker
 import com.buspay.app.device.BluetoothEscPosTicketPrinter
 import com.buspay.app.device.PrintResult
 import com.buspay.app.device.PrintableTicket
@@ -17,10 +19,14 @@ import com.buspay.app.domain.Driver
 import com.buspay.app.domain.DriverShiftSummary
 import com.buspay.app.domain.FareType
 import com.buspay.app.domain.Route
+import com.buspay.app.domain.RouteProgress
+import com.buspay.app.domain.RouteProgressSource
+import com.buspay.app.domain.RouteStopStatus
 import com.buspay.app.domain.Shift
-import com.buspay.app.domain.Stop
 import com.buspay.app.domain.Ticket
 import com.buspay.app.domain.TicketPrintStatus
+import com.buspay.app.domain.nearestForwardStopIndex
+import com.buspay.app.domain.routeStopStatus
 import com.buspay.app.domain.summarizeTicketsByFare
 import kotlinx.coroutines.launch
 import java.text.DateFormat
@@ -36,6 +42,9 @@ data class DriverShiftUiState(
     val selectedBus: Bus? = null,
     val selectedRoute: Route? = null,
     val activeShift: Shift? = null,
+    val routeProgress: RouteProgress? = null,
+    val isGpsTracking: Boolean = false,
+    val gpsMessage: String? = null,
     val fareTypes: List<FareType> = emptyList(),
     val selectedFareType: FareType? = null,
     val pairedPrinters: List<PrinterDevice> = emptyList(),
@@ -45,11 +54,27 @@ data class DriverShiftUiState(
     val lastPdfPath: String? = null,
     val tickets: List<Ticket> = emptyList(),
     val pendingTicketCount: Int = 0,
-    val lastClosedSummary: DriverShiftSummary? = null
+    val lastClosedSummary: DriverShiftSummary? = null,
+    val lastClosedRoute: Route? = null,
+    val lastClosedRouteProgress: RouteProgress? = null
 ) {
     val isDriverSignedIn: Boolean = signedInDriver != null
     val isShiftActive: Boolean = activeShift != null
-    val nextStopName: String = selectedRoute?.stops?.firstOrNull()?.name ?: "Select a route"
+    val routeStopStatus: RouteStopStatus = routeStopStatus(
+        stops = selectedRoute?.stops.orEmpty(),
+        currentStopIndex = routeProgress?.currentStopIndex ?: 0
+    )
+    val passengerRoute: Route? = if (isShiftActive) selectedRoute else lastClosedRoute
+    val passengerRouteProgress: RouteProgress? = if (isShiftActive) {
+        routeProgress
+    } else {
+        lastClosedRouteProgress
+    }
+    val passengerRouteStopStatus: RouteStopStatus = routeStopStatus(
+        stops = passengerRoute?.stops.orEmpty(),
+        currentStopIndex = passengerRouteProgress?.currentStopIndex ?: 0
+    )
+    val canOpenPassengerDisplay: Boolean = passengerRoute != null && passengerRouteProgress != null
     val ticketCount: Int = tickets.size
     val cashTotalCents: Int = tickets.sumOf { it.priceCents }
     val fareTypeSummaries = summarizeTicketsByFare(tickets, fareTypes)
@@ -62,6 +87,7 @@ class DriverShiftViewModel(application: Application) : AndroidViewModel(applicat
     private val repository = OfflineFirstRepository(application.applicationContext)
     private val bluetoothTicketPrinter = BluetoothEscPosTicketPrinter(application.applicationContext)
     private val pdfTicketPrinter = PdfTicketPrinter(application.applicationContext)
+    private val gpsTracker = AndroidGpsTracker(application.applicationContext)
 
     var uiState by mutableStateOf(createInitialState())
         private set
@@ -135,20 +161,78 @@ class DriverShiftViewModel(application: Application) : AndroidViewModel(applicat
         val bus = uiState.selectedBus ?: return
         val route = uiState.selectedRoute ?: return
 
-        uiState = uiState.copy(
-            activeShift = Shift(
-                id = "shift-${System.currentTimeMillis()}",
-                driverId = driver.id,
-                busId = bus.id,
-                routeId = route.id,
-                startedAtMillis = System.currentTimeMillis()
-            ),
-            tickets = emptyList(),
-            pendingTicketCount = repository.pendingTicketCount(),
-            lastClosedSummary = null
+        val shift = Shift(
+            id = "shift-${System.currentTimeMillis()}",
+            driverId = driver.id,
+            busId = bus.id,
+            routeId = route.id,
+            startedAtMillis = System.currentTimeMillis()
+        )
+        val initialProgress = RouteProgress(
+            shiftId = shift.id,
+            currentStopIndex = 0,
+            updatedAtMillis = shift.startedAtMillis,
+            source = RouteProgressSource.SHIFT_START
         )
 
-        uiState.activeShift?.let(repository::saveActiveShift)
+        uiState = uiState.copy(
+            activeShift = shift,
+            routeProgress = initialProgress,
+            isGpsTracking = false,
+            gpsMessage = "Allow location to update stops automatically, or use demo advance.",
+            tickets = emptyList(),
+            pendingTicketCount = repository.pendingTicketCount(),
+            lastClosedSummary = null,
+            lastClosedRoute = null,
+            lastClosedRouteProgress = null
+        )
+
+        repository.saveActiveShift(shift)
+        repository.saveRouteProgress(initialProgress)
+    }
+
+    fun startGpsTracking() {
+        if (!uiState.isShiftActive || uiState.isGpsTracking) return
+
+        val started = try {
+            gpsTracker.start(::onLocationUpdate)
+        } catch (_: SecurityException) {
+            false
+        }
+        uiState = uiState.copy(
+            isGpsTracking = started,
+            gpsMessage = if (started) {
+                "GPS tracking is active"
+            } else {
+                "GPS is unavailable. Check location permission and device location settings."
+            }
+        )
+    }
+
+    fun stopGpsTracking() {
+        gpsTracker.stop()
+        if (uiState.isGpsTracking) {
+            uiState = uiState.copy(
+                isGpsTracking = false,
+                gpsMessage = if (uiState.isShiftActive) "GPS tracking is paused" else null
+            )
+        }
+    }
+
+    fun advanceToNextStop() {
+        val shift = uiState.activeShift ?: return
+        val route = uiState.selectedRoute ?: return
+        if (route.stops.isEmpty()) return
+        val currentIndex = uiState.routeProgress?.currentStopIndex ?: 0
+        updateRouteProgress(
+            RouteProgress(
+                shiftId = shift.id,
+                currentStopIndex = (currentIndex + 1).coerceAtMost(route.stops.lastIndex),
+                updatedAtMillis = System.currentTimeMillis(),
+                source = RouteProgressSource.MANUAL
+            ),
+            "Stop advanced in demo mode"
+        )
     }
 
     fun sellTicket() {
@@ -188,51 +272,103 @@ class DriverShiftViewModel(application: Application) : AndroidViewModel(applicat
             return
         }
 
+        stopGpsTracking()
+        val closedRoute = uiState.selectedRoute
+        val closedRouteProgress = uiState.routeProgress
         repository.clearActiveShift()
 
         uiState = uiState.copy(
             activeShift = null,
+            routeProgress = null,
+            isGpsTracking = false,
+            gpsMessage = null,
             tickets = emptyList(),
             pendingTicketCount = repository.pendingTicketCount(),
             lastClosedSummary = DriverShiftSummary(
                 ticketCount = uiState.ticketCount,
                 cashTotalCents = uiState.cashTotalCents,
                 fareTypeSummaries = uiState.fareTypeSummaries
-            )
+            ),
+            lastClosedRoute = closedRoute,
+            lastClosedRouteProgress = closedRouteProgress
         )
     }
 
     private fun createInitialState(): DriverShiftUiState {
         val restoredShift = repository.loadActiveShift()
         val restoredDriver = restoredShift?.let { shift ->
-            demoDrivers.firstOrNull { it.id == shift.driverId }
+            DemoTransitData.drivers.firstOrNull { it.id == shift.driverId }
         } ?: repository.loadSignedInDriver()?.let { signedInDriver ->
-            demoDrivers.firstOrNull { it.id == signedInDriver.id } ?: signedInDriver
+            DemoTransitData.drivers.firstOrNull { it.id == signedInDriver.id } ?: signedInDriver
         }
         val restoredTickets = restoredShift?.let { shift ->
             repository.loadTicketsForShift(shift.id)
         }.orEmpty()
+        val restoredProgress = restoredShift?.let { shift ->
+            repository.loadRouteProgress(shift.id)
+        }
 
         return DriverShiftUiState(
-            availableDrivers = demoDrivers,
-            selectedDriver = restoredDriver ?: demoDrivers.first(),
+            availableDrivers = DemoTransitData.drivers,
+            selectedDriver = restoredDriver ?: DemoTransitData.drivers.first(),
             signedInDriver = restoredDriver,
-            buses = demoBuses,
-            routes = demoRoutes,
+            buses = DemoTransitData.buses,
+            routes = DemoTransitData.routes,
             selectedBus = restoredShift?.let { shift ->
-                demoBuses.firstOrNull { it.id == shift.busId }
-            } ?: demoBuses.first(),
+                DemoTransitData.buses.firstOrNull { it.id == shift.busId }
+            } ?: DemoTransitData.buses.first(),
             selectedRoute = restoredShift?.let { shift ->
-                demoRoutes.firstOrNull { it.id == shift.routeId }
-            } ?: demoRoutes.first(),
+                DemoTransitData.routes.firstOrNull { it.id == shift.routeId }
+            } ?: DemoTransitData.routes.first(),
             activeShift = restoredShift,
-            fareTypes = demoFareTypes,
-            selectedFareType = demoFareTypes.first(),
+            routeProgress = restoredProgress ?: restoredShift?.let { shift ->
+                RouteProgress(
+                    shiftId = shift.id,
+                    currentStopIndex = 0,
+                    updatedAtMillis = shift.startedAtMillis,
+                    source = RouteProgressSource.SHIFT_START
+                )
+            },
+            gpsMessage = restoredShift?.let { "Allow location to resume automatic stop tracking." },
+            fareTypes = DemoTransitData.fareTypes,
+            selectedFareType = DemoTransitData.fareTypes.first(),
             pairedPrinters = pdfTicketPrinter.pairedPrinters(),
             selectedPrinter = repository.loadPrinter() ?: PdfTicketPrinter.TEST_DEVICE,
             tickets = restoredTickets,
             pendingTicketCount = repository.pendingTicketCount()
         )
+    }
+
+    private fun onLocationUpdate(location: com.buspay.app.device.GeoLocation) {
+        val shift = uiState.activeShift ?: return
+        val route = uiState.selectedRoute ?: return
+        if (route.stops.isEmpty()) return
+        val currentIndex = uiState.routeProgress?.currentStopIndex ?: 0
+        val nextIndex = nearestForwardStopIndex(
+            stops = route.stops,
+            latitude = location.latitude,
+            longitude = location.longitude,
+            currentStopIndex = currentIndex
+        )
+        updateRouteProgress(
+            RouteProgress(
+                shiftId = shift.id,
+                currentStopIndex = nextIndex,
+                updatedAtMillis = location.capturedAtMillis,
+                source = RouteProgressSource.GPS
+            ),
+            "GPS updated the current stop"
+        )
+    }
+
+    private fun updateRouteProgress(progress: RouteProgress, message: String) {
+        repository.saveRouteProgress(progress)
+        uiState = uiState.copy(routeProgress = progress, gpsMessage = message)
+    }
+
+    override fun onCleared() {
+        gpsTracker.stop()
+        super.onCleared()
     }
 
     private fun printTicket(ticket: Ticket) {
@@ -321,64 +457,4 @@ class DriverShiftViewModel(application: Application) : AndroidViewModel(applicat
         )
     }
 
-    private companion object {
-        val demoDrivers = listOf(
-            Driver(id = "driver-001", name = "Arben Krasniqi"),
-            Driver(id = "driver-002", name = "Drita Berisha"),
-            Driver(id = "driver-003", name = "Ilir Gashi")
-        )
-
-        val demoBuses = listOf(
-            Bus(id = "bus-101", plateNumber = "01-101-KS"),
-            Bus(id = "bus-205", plateNumber = "01-205-KS"),
-            Bus(id = "bus-318", plateNumber = "01-318-KS")
-        )
-
-        val demoFareTypes = listOf(
-            FareType(
-                id = Ticket.STANDARD_FARE_TYPE_ID,
-                name = "Standard",
-                priceCents = 50
-            ),
-            FareType(
-                id = "student",
-                name = "Student",
-                priceCents = 30,
-                eligibility = "Valid student ID required"
-            ),
-            FareType(
-                id = "senior",
-                name = "Senior 65+",
-                priceCents = 25,
-                eligibility = "For passengers aged 65 or older"
-            ),
-            FareType(
-                id = "child",
-                name = "Child",
-                priceCents = 20,
-                eligibility = "For children aged 6 to 12"
-            )
-        )
-
-        val demoRoutes = listOf(
-            Route(
-                id = "route-1",
-                name = "Line 1 - Center to Hospital",
-                stops = listOf(
-                    Stop("stop-1", "Central Station", 42.6629, 21.1655, 1),
-                    Stop("stop-2", "Mother Teresa Boulevard", 42.6608, 21.1622, 2),
-                    Stop("stop-3", "University Hospital", 42.6488, 21.1612, 3)
-                )
-            ),
-            Route(
-                id = "route-2",
-                name = "Line 2 - Center to Sunny Hill",
-                stops = listOf(
-                    Stop("stop-4", "Central Station", 42.6629, 21.1655, 1),
-                    Stop("stop-5", "City Park", 42.6551, 21.1713, 2),
-                    Stop("stop-6", "Sunny Hill", 42.6468, 21.1781, 3)
-                )
-            )
-        )
-    }
 }

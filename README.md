@@ -17,6 +17,9 @@ It currently includes:
 - paired Bluetooth ESC/POS label-printer selection
 - automatic ticket printing with durable failure state and retry
 - built-in PDF test printer for validation without printer hardware
+- forward-only GPS route progress with persistent current-stop state
+- synchronized current/next-stop information on the driver console
+- dedicated passenger display with a hardware-free demo advance control
 - cash ticket count and cash total during an active shift
 - persistent local active shift storage
 - persistent local ticket storage for future sync
@@ -33,8 +36,8 @@ It currently includes:
 4. Driver login and driver identity - complete
 5. Ticket fare types and discounts - complete
 6. Receipt printing integration - complete
-7. GPS route progress and next-stop tracking - next
-8. Stop-request button integration - planned
+7. GPS route progress and next-stop tracking - complete
+8. Stop-request button integration - next
 9. Server sync for shifts and tickets - planned
 10. Admin reporting dashboard data contract - planned
 
@@ -45,23 +48,28 @@ Presentation documentation:
 - English: `docs/EN/02-driver-shift-flow.md`
 - English: `docs/EN/03-persistent-local-ticket-storage.md`
 - English: `docs/EN/04-driver-login-and-identity.md`
+- English: `docs/EN/07-gps-route-progress-and-passenger-display.md`
 - Albanian: `docs/SQ/02-rrjedha-e-turnit-te-shoferit.md`
 - Albanian: `docs/SQ/03-ruajtja-lokale-e-biletave.md`
 - Albanian: `docs/SQ/04-kycja-dhe-identiteti-i-shoferit.md`
+- Albanian: `docs/SQ/07-perparimi-i-linjes-me-gps-dhe-ekrani-i-pasagjereve.md`
 
 Technical documentation:
 
 - `docs/TECHNICAL/02-driver-shift-flow.md`
 - `docs/TECHNICAL/03-persistent-local-ticket-storage.md`
 - `docs/TECHNICAL/04-driver-login-and-identity.md`
+- `docs/TECHNICAL/05-ticket-fares-and-discounts.md`
+- `docs/TECHNICAL/06-bluetooth-ticket-printing.md`
+- `docs/TECHNICAL/07-gps-route-progress-and-passenger-display.md`
 
 ## Next build milestone
 
-Build route progress and the passenger display:
+Build stop-request button integration:
 
-1. Track the bus position against the selected route.
-2. Show the current and next stops on a dedicated passenger screen.
-3. Keep the onboard display synchronized with the active driver shift.
+1. Receive a stop request from the device integration boundary.
+2. Show the active request to the driver and passengers.
+3. Clear the request safely when the bus reaches the requested stop.
 
 #######################################
 
@@ -84,6 +92,9 @@ Aktualisht përfshin:
 - zgjedhjen e printerit Bluetooth ESC/POS të çiftuar
 - printimin automatik të biletës me ruajtjen e dështimit dhe riprovim
 - printerin testues PDF për validim pa pajisje fizike
+- përparimin e linjës me GPS vetëm përpara dhe ruajtjen e ndalesës aktuale
+- ndalesën aktuale dhe të ardhshme të sinkronizuar në konsolën e shoferit
+- ekranin e veçantë për pasagjerë me avancim demo pa pajisje
 - numërimin e biletave me para të gatshme dhe totalin e arkës gjatë turnit aktiv
 - ruajtjen lokale të turnit aktiv
 - ruajtjen lokale të biletave për sinkronizim të ardhshëm
@@ -100,15 +111,15 @@ Aktualisht përfshin:
 4. Kyçja e shoferit dhe identiteti i shoferit - përfunduar
 5. Llojet e tarifave dhe zbritjet - përfunduar
 6. Integrimi i printimit të biletave - përfunduar
-7. Përparimi i linjës me GPS dhe ndalesa e radhës - moduli i radhës
-8. Integrimi i butonit për kërkesë ndalese - planifikuar
+7. Përparimi i linjës me GPS dhe ndalesa e radhës - përfunduar
+8. Integrimi i butonit për kërkesë ndalese - moduli i radhës
 9. Sinkronizimi i turneve dhe biletave me serverin - planifikuar
 10. Kontrata e të dhënave për raportim në panelin administrativ - planifikuar
 
 ## Pika e ndërtimit tjetër
 
-Ndërtoni përparimin e linjës dhe ekranin e pasagjerëve:
+Ndërtoni integrimin e butonit për kërkesë ndalese:
 
-1. Ndiqni pozitën e autobusit kundrejt linjës së zgjedhur.
-2. Shfaqni ndalesën aktuale dhe të ardhshme në një ekran të posaçëm.
-3. Mbajeni ekranin në autobus të sinkronizuar me turnin aktiv të shoferit.
+1. Pranojeni kërkesën për ndalesë nga kufiri i integrimit të pajisjes.
+2. Shfaqeni kërkesën aktive te shoferi dhe pasagjerët.
+3. Pastrojeni kërkesën në mënyrë të sigurt kur autobusi arrin në ndalesën e kërkuar.

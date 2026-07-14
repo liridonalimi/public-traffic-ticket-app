@@ -46,6 +46,12 @@ data class RouteProgress(
     val source: RouteProgressSource
 )
 
+data class RouteStopStatus(
+    val currentStop: Stop?,
+    val nextStop: Stop?,
+    val isRouteComplete: Boolean
+)
+
 data class FareType(
     val id: String,
     val name: String,
@@ -114,22 +120,45 @@ fun nearestForwardStopIndex(
     stops: List<Stop>,
     latitude: Double,
     longitude: Double,
-    currentStopIndex: Int
+    currentStopIndex: Int,
+    arrivalRadiusMeters: Double = 150.0
 ): Int {
     if (stops.isEmpty()) return 0
     val safeCurrentIndex = currentStopIndex.coerceIn(0, stops.lastIndex)
 
-    return stops.indices
+    val nearestForwardStop = stops.indices
         .filter { it >= safeCurrentIndex }
-        .minByOrNull { index ->
-            distanceMeters(
+        .map { index ->
+            index to distanceMeters(
                 latitude1 = latitude,
                 longitude1 = longitude,
                 latitude2 = stops[index].latitude,
                 longitude2 = stops[index].longitude
             )
         }
+        .minByOrNull { (_, distance) -> distance }
+
+    return nearestForwardStop
+        ?.takeIf { (_, distance) -> distance <= arrivalRadiusMeters }
+        ?.first
         ?: safeCurrentIndex
+}
+
+fun routeStopStatus(stops: List<Stop>, currentStopIndex: Int): RouteStopStatus {
+    if (stops.isEmpty()) {
+        return RouteStopStatus(
+            currentStop = null,
+            nextStop = null,
+            isRouteComplete = false
+        )
+    }
+
+    val safeCurrentIndex = currentStopIndex.coerceIn(0, stops.lastIndex)
+    return RouteStopStatus(
+        currentStop = stops[safeCurrentIndex],
+        nextStop = stops.getOrNull(safeCurrentIndex + 1),
+        isRouteComplete = safeCurrentIndex == stops.lastIndex
+    )
 }
 
 private fun distanceMeters(

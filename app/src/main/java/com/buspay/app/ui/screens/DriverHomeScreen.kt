@@ -5,6 +5,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
+import android.Manifest
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -37,6 +38,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -54,6 +56,7 @@ import java.io.File
 fun DriverHomeScreen(viewModel: DriverShiftViewModel = viewModel()) {
     val state = viewModel.uiState
     val context = LocalContext.current
+    var showPassengerDisplay by remember { mutableStateOf(false) }
     var hasBluetoothPermission by remember {
         mutableStateOf(hasBluetoothPrinterPermission(context))
     }
@@ -63,12 +66,38 @@ fun DriverHomeScreen(viewModel: DriverShiftViewModel = viewModel()) {
         hasBluetoothPermission = granted
         if (granted) viewModel.refreshPrinters()
     }
+    var hasLocationPermission by remember {
+        mutableStateOf(hasLocationPermission(context))
+    }
+    val locationPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestMultiplePermissions()
+    ) { permissions ->
+        hasLocationPermission = permissions.values.any { it }
+        if (hasLocationPermission) viewModel.startGpsTracking()
+    }
 
     LaunchedEffect(hasBluetoothPermission) {
         viewModel.refreshPrinters()
     }
 
+    LaunchedEffect(state.isShiftActive, hasLocationPermission) {
+        if (state.isShiftActive && hasLocationPermission) {
+            viewModel.startGpsTracking()
+        } else if (!state.isShiftActive) {
+            viewModel.stopGpsTracking()
+            showPassengerDisplay = false
+        }
+    }
+
     MaterialTheme {
+        if (showPassengerDisplay && state.canOpenPassengerDisplay) {
+            PassengerDisplay(
+                state = state,
+                onBackToDriverConsole = { showPassengerDisplay = false }
+            )
+            return@MaterialTheme
+        }
+
         Surface(modifier = Modifier.fillMaxSize()) {
             Column(
                 modifier = Modifier
@@ -223,8 +252,65 @@ fun DriverHomeScreen(viewModel: DriverShiftViewModel = viewModel()) {
 
                     Spacer(modifier = Modifier.height(20.dp))
 
-                    Text(text = "Next stop", fontWeight = FontWeight.Bold)
-                    Text(text = if (state.isShiftActive) state.nextStopName else "Start a shift to begin tracking")
+                    Text(text = "Route progress", fontWeight = FontWeight.Bold)
+                    if (state.isShiftActive) {
+                        Text(
+                            text = "Current: ${state.routeStopStatus.currentStop?.name ?: "Unknown"}"
+                        )
+                        Text(
+                            text = state.routeStopStatus.nextStop?.let { "Next: ${it.name}" }
+                                ?: "Final stop reached"
+                        )
+                        state.gpsMessage?.let { Text(text = it) }
+                        Spacer(modifier = Modifier.height(8.dp))
+                        if (!hasLocationPermission) {
+                            Button(
+                                onClick = {
+                                    locationPermissionLauncher.launch(
+                                        arrayOf(
+                                            Manifest.permission.ACCESS_FINE_LOCATION,
+                                            Manifest.permission.ACCESS_COARSE_LOCATION
+                                        )
+                                    )
+                                },
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Text("Allow GPS Route Tracking")
+                            }
+                            Spacer(modifier = Modifier.height(8.dp))
+                        }
+                        OutlinedButton(
+                            onClick = viewModel::advanceToNextStop,
+                            enabled = !state.routeStopStatus.isRouteComplete,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text("Advance Stop (Demo)")
+                        }
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Button(
+                            onClick = { showPassengerDisplay = true },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text("Open Passenger Display")
+                        }
+                    } else {
+                        if (state.canOpenPassengerDisplay) {
+                            Text(text = "The last shift has ended")
+                            Text(
+                                text = "Last stop: " +
+                                    (state.passengerRouteStopStatus.currentStop?.name ?: "Unknown")
+                            )
+                            Spacer(modifier = Modifier.height(8.dp))
+                            OutlinedButton(
+                                onClick = { showPassengerDisplay = true },
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Text("Open Last Passenger Display")
+                            }
+                        } else {
+                            Text(text = "Start a shift to begin tracking")
+                        }
+                    }
 
                     Spacer(modifier = Modifier.height(20.dp))
 
@@ -329,6 +415,63 @@ fun DriverHomeScreen(viewModel: DriverShiftViewModel = viewModel()) {
 }
 
 @Composable
+private fun PassengerDisplay(
+    state: DriverShiftUiState,
+    onBackToDriverConsole: () -> Unit
+) {
+    val route = state.passengerRoute
+    val progress = state.passengerRouteProgress
+    val status = state.passengerRouteStopStatus
+
+    Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.primaryContainer) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(32.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.SpaceBetween
+        ) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text(
+                    text = route?.name ?: "Active route",
+                    style = MaterialTheme.typography.headlineSmall,
+                    textAlign = TextAlign.Center
+                )
+                Spacer(modifier = Modifier.height(40.dp))
+                Text(text = "CURRENT STOP", fontWeight = FontWeight.Bold)
+                Text(
+                    text = status.currentStop?.name ?: "Unknown stop",
+                    fontSize = 34.sp,
+                    fontWeight = FontWeight.Bold,
+                    textAlign = TextAlign.Center
+                )
+                Spacer(modifier = Modifier.height(40.dp))
+                Text(
+                    text = if (status.isRouteComplete) "ROUTE COMPLETE" else "NEXT STOP",
+                    fontWeight = FontWeight.Bold
+                )
+                Text(
+                    text = status.nextStop?.name ?: "Final destination",
+                    fontSize = 26.sp,
+                    textAlign = TextAlign.Center
+                )
+                Spacer(modifier = Modifier.height(24.dp))
+                val currentNumber = (progress?.currentStopIndex ?: 0) + 1
+                Text(text = "Stop $currentNumber of ${route?.stops?.size ?: 0}")
+                if (!state.isShiftActive) {
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Text(text = "SHIFT ENDED", fontWeight = FontWeight.Bold)
+                }
+            }
+
+            OutlinedButton(onClick = onBackToDriverConsole) {
+                Text("Back to Driver Console")
+            }
+        }
+    }
+}
+
+@Composable
 private fun <T> SelectorCard(
     title: String,
     selectedText: String,
@@ -382,6 +525,16 @@ private fun hasBluetoothPrinterPermission(context: Context): Boolean {
             context,
             BLUETOOTH_CONNECT_PERMISSION
         ) == PackageManager.PERMISSION_GRANTED
+}
+
+private fun hasLocationPermission(context: Context): Boolean {
+    return ContextCompat.checkSelfPermission(
+        context,
+        Manifest.permission.ACCESS_FINE_LOCATION
+    ) == PackageManager.PERMISSION_GRANTED || ContextCompat.checkSelfPermission(
+        context,
+        Manifest.permission.ACCESS_COARSE_LOCATION
+    ) == PackageManager.PERMISSION_GRANTED
 }
 
 private fun printerDisplayName(printer: PrinterDevice): String {

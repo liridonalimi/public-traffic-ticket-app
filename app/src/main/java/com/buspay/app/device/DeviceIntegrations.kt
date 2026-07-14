@@ -63,15 +63,21 @@ class AndroidGpsTracker(context: Context) : GpsTracker {
             }
         }
         locationListener = listener
-        providers.forEach { provider ->
-            manager.requestLocationUpdates(
-                provider,
-                LOCATION_UPDATE_INTERVAL_MILLIS,
-                LOCATION_UPDATE_DISTANCE_METERS,
-                listener,
-                Looper.getMainLooper()
-            )
-            manager.getLastKnownLocation(provider)?.let(listener::onLocationChanged)
+        val registeredProviders = providers.filter { provider ->
+            runCatching {
+                manager.requestLocationUpdates(
+                    provider,
+                    LOCATION_UPDATE_INTERVAL_MILLIS,
+                    LOCATION_UPDATE_DISTANCE_METERS,
+                    listener,
+                    Looper.getMainLooper()
+                )
+                manager.getLastKnownLocation(provider)?.let(listener::onLocationChanged)
+            }.isSuccess
+        }
+        if (registeredProviders.isEmpty()) {
+            locationListener = null
+            return false
         }
         return true
     }
