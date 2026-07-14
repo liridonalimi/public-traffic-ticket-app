@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<paths xmlns:android="http://schemas.android.com/apk/res/android">
+    <external-files-path
+        name="external_ticket_pdfs"
+        path="Documents/tickets/" />
+    <files-path
+        name="internal_ticket_pdfs"
+        path="tickets/" />
+</paths>

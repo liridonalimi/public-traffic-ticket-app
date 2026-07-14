@@ -12,6 +12,11 @@ It currently includes:
 - first driver shift flow
 - local driver sign-in and driver identity
 - bus and route selection using demo data
+- standard, student, senior, and child ticket fares
+- discounted-fare eligibility guidance and per-fare shift totals
+- paired Bluetooth ESC/POS label-printer selection
+- automatic ticket printing with durable failure state and retry
+- built-in PDF test printer for validation without printer hardware
 - cash ticket count and cash total during an active shift
 - persistent local active shift storage
 - persistent local ticket storage for future sync
@@ -26,9 +31,9 @@ It currently includes:
 2. Driver shift flow - complete
 3. Persistent local ticket storage - complete
 4. Driver login and driver identity - complete
-5. Ticket fare types and discounts - next
-6. Receipt printing integration - planned
-7. GPS route progress and next-stop tracking - planned
+5. Ticket fare types and discounts - complete
+6. Receipt printing integration - complete
+7. GPS route progress and next-stop tracking - next
 8. Stop-request button integration - planned
 9. Server sync for shifts and tickets - planned
 10. Admin reporting dashboard data contract - planned
@@ -52,11 +57,11 @@ Technical documentation:
 
 ## Next build milestone
 
-Build ticket fare types and discounts:
+Build route progress and the passenger display:
 
-1. Add multiple fare types instead of only one standard ticket.
-2. Support discounted tickets for selected passenger groups.
-3. Show fare type totals in the shift summary.
+1. Track the bus position against the selected route.
+2. Show the current and next stops on a dedicated passenger screen.
+3. Keep the onboard display synchronized with the active driver shift.
 
 #######################################
 
@@ -74,6 +79,11 @@ Aktualisht përfshin:
 - rrjedhën e parë të turnit të shoferit
 - kyçjen lokale dhe identitetin e shoferit
 - zgjedhjen e autobusit dhe linjës me të dhëna demo
+- tarifat standarde, studentore, për të moshuar dhe për fëmijë
+- udhëzimet për zbritje dhe totalet e turnit sipas tarifës
+- zgjedhjen e printerit Bluetooth ESC/POS të çiftuar
+- printimin automatik të biletës me ruajtjen e dështimit dhe riprovim
+- printerin testues PDF për validim pa pajisje fizike
 - numërimin e biletave me para të gatshme dhe totalin e arkës gjatë turnit aktiv
 - ruajtjen lokale të turnit aktiv
 - ruajtjen lokale të biletave për sinkronizim të ardhshëm
@@ -88,17 +98,17 @@ Aktualisht përfshin:
 2. Rrjedha e turnit të shoferit - përfunduar
 3. Ruajtja lokale e biletave - përfunduar
 4. Kyçja e shoferit dhe identiteti i shoferit - përfunduar
-5. Llojet e tarifave dhe zbritjet - moduli i radhës
-6. Integrimi i printimit të biletave - planifikuar
-7. Përparimi i linjës me GPS dhe ndalesa e radhës - planifikuar
+5. Llojet e tarifave dhe zbritjet - përfunduar
+6. Integrimi i printimit të biletave - përfunduar
+7. Përparimi i linjës me GPS dhe ndalesa e radhës - moduli i radhës
 8. Integrimi i butonit për kërkesë ndalese - planifikuar
 9. Sinkronizimi i turneve dhe biletave me serverin - planifikuar
 10. Kontrata e të dhënave për raportim në panelin administrativ - planifikuar
 
 ## Pika e ndërtimit tjetër
 
-Ndërtoni llojet e tarifave dhe zbritjet:
+Ndërtoni përparimin e linjës dhe ekranin e pasagjerëve:
 
-1. Shtoni disa lloje tarifash në vend të vetëm një bilete standarde.
-2. Mbështetni bileta me zbritje për grupe të zgjedhura pasagjerësh.
-3. Shfaqni totalet sipas llojit të tarifës në përmbledhjen e turnit.
+1. Ndiqni pozitën e autobusit kundrejt linjës së zgjedhur.
+2. Shfaqni ndalesën aktuale dhe të ardhshme në një ekran të posaçëm.
+3. Mbajeni ekranin në autobus të sinkronizuar me turnin aktiv të shoferit.

@@ -14,7 +14,7 @@ Install these on the Mac:
 The easiest path is to install Android Studio, then open this folder:
 
 ```text
-/Users/ljiridon.aljimi/Documents/public_traffic_ticket_app
+/Users/ljiridon.aljimi/Developer/public_traffic_ticket_app
 ```
 
 Android Studio should detect the Gradle project and download the Android Gradle Plugin and Kotlin plugin automatically.
@@ -25,6 +25,32 @@ Android Studio should detect the Gradle project and download the Android Gradle 
 2. Let Gradle sync finish.
 3. Create an Android emulator or connect a real Android tablet.
 4. Run the `app` configuration.
+
+## Bluetooth label printer setup
+
+The current hardware adapter supports Bluetooth Classic printers that accept ESC/POS commands over the serial-port profile (SPP).
+
+1. On the Android tablet, open Bluetooth settings and pair the printer.
+2. Start BusPay and allow the nearby-device/Bluetooth permission when requested.
+3. In **Ticket printer**, tap **Refresh Paired Printers**.
+4. Select the paired printer before starting ticket sales.
+5. Run a low-value test sale and verify the label width, text, feed, and cutter behavior on the target hardware.
+
+Printing failures are stored with the ticket. The driver can retry the last unprinted ticket without recording another sale, and cannot close the shift while a ticket remains unprinted.
+
+Printers using ZPL, TSPL, CPCL, BLE-only transport, USB, or a vendor SDK require a matching adapter and ticket encoder; they are not compatible with the included ESC/POS SPP adapter.
+
+## PDF test printer
+
+Use the built-in PDF output when no physical printer is available:
+
+1. Start BusPay; Bluetooth permission is not required for PDF testing.
+2. Under **Ticket output**, select **PDF Test Printer**.
+3. Start a shift, select a fare, and sell a ticket.
+4. After the success message appears, tap **Open Last Ticket PDF**.
+5. Confirm the PDF contains the Kosovo-style test layout: fare row, total, cash payment, ticket code, bus, route, driver/operator, sale time, test QR, and the visible `JO FISKAL` warning.
+
+The PDF uses a narrow 58 mm ticket-style page and is stored in the app's private documents area. Android shares it with the selected PDF viewer through a read-only `FileProvider` URI. Its QR stores local test-ticket data only; it is not an ATK fiscal-verification QR. This validates ticket content and the application's sale-to-print workflow, but it does not validate fiscal compliance, Bluetooth, ESC/POS compatibility, paper handling, or physical print quality.
 
 ## Product direction
 
