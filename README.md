@@ -26,6 +26,8 @@ It currently includes:
 - demo server controls for safe failure and retry validation
 - versioned admin reporting contract with driver, shift, ticket, fare, cash, and sync totals
 - in-app admin report preview with legacy-data quality warnings
+- authenticated HTTPS production sync client with idempotent contract validation
+- cleartext blocking and safe acknowledgement/error handling for production sync
 - cash ticket count and cash total during an active shift
 - persistent local active shift storage
 - persistent local ticket storage for future sync
@@ -46,6 +48,7 @@ It currently includes:
 8. Stop-request button integration - complete
 9. Server sync for shifts and tickets - complete
 10. Admin reporting dashboard data contract - complete
+11. Authenticated HTTPS sync client foundation - complete
 
 ## Documentation
 
@@ -61,6 +64,7 @@ Presentation documentation:
 - English: `docs/EN/08-stop-request-button-integration.md`
 - English: `docs/EN/09-offline-server-sync.md`
 - English: `docs/EN/10-admin-reporting-data-contract.md`
+- English: `docs/EN/11-authenticated-https-sync-client.md`
 - Albanian: `docs/SQ/01-themeli-i-projektit-dhe-skeleti-android.md`
 - Albanian: `docs/SQ/02-rrjedha-e-turnit-te-shoferit.md`
 - Albanian: `docs/SQ/03-ruajtja-lokale-e-biletave.md`
@@ -71,6 +75,7 @@ Presentation documentation:
 - Albanian: `docs/SQ/08-integrimi-i-butonit-per-kerkese-ndalese.md`
 - Albanian: `docs/SQ/09-sinkronizimi-offline-me-serverin.md`
 - Albanian: `docs/SQ/10-kontrata-e-raportimit-administrativ.md`
+- Albanian: `docs/SQ/11-klienti-i-autentikuar-i-sinkronizimit-https.md`
 
 Technical documentation:
 
@@ -84,14 +89,15 @@ Technical documentation:
 - `docs/TECHNICAL/08-stop-request-button-integration.md`
 - `docs/TECHNICAL/09-offline-server-sync.md`
 - `docs/TECHNICAL/10-admin-reporting-data-contract.md`
+- `docs/TECHNICAL/11-authenticated-https-sync-client.md`
 
 ## Next build milestone
 
-Begin production integration:
+Continue production integration:
 
-1. Connect an authenticated HTTPS sync service and database.
+1. Deploy the sync endpoint/database and connect production identity token issuance.
 2. Build the web dashboard against reporting contract version 1.
-3. Add production security, privacy, audit, export, and deployment controls.
+3. Add privacy, audit, export, certificate, and deployment controls.
 
 #######################################
 
@@ -123,6 +129,8 @@ Aktualisht përfshin:
 - kontrollet e serverit demo për validimin e dështimit dhe riprovimit
 - kontratën e versionuar të raportimit me totalet e shoferëve, turneve, biletave, tarifave, arkës dhe sinkronizimit
 - pamjen administrative në aplikacion me paralajmërime për cilësinë e të dhënave të vjetra
+- klientin e autentikuar HTTPS për sinkronizimin e prodhimit me kontratë idempotente
+- bllokimin e trafikut të pakriptuar dhe trajtimin e sigurt të konfirmimeve/gabimeve
 - numërimin e biletave me para të gatshme dhe totalin e arkës gjatë turnit aktiv
 - ruajtjen lokale të turnit aktiv
 - ruajtjen lokale të biletave për sinkronizim të ardhshëm
@@ -143,11 +151,12 @@ Aktualisht përfshin:
 8. Integrimi i butonit për kërkesë ndalese - përfunduar
 9. Sinkronizimi i turneve dhe biletave me serverin - përfunduar
 10. Kontrata e të dhënave për raportim në panelin administrativ - përfunduar
+11. Baza e klientit të autentikuar për sinkronizim HTTPS - përfunduar
 
 ## Pika e ndërtimit tjetër
 
-Filloni integrimin në prodhim:
+Vazhdoni integrimin në prodhim:
 
-1. Lidheni shërbimin HTTPS të autentikuar dhe bazën e të dhënave.
+1. Vendosni endpoint-in/bazën dhe lidhni lëshimin e tokenit nga identiteti i prodhimit.
 2. Ndërtojeni panelin web sipas versionit 1 të kontratës.
-3. Shtoni sigurinë, privatësinë, auditimin, eksportin dhe vendosjen në prodhim.
+3. Shtoni privatësinë, auditimin, eksportin, certifikatat dhe kontrollet e vendosjes.

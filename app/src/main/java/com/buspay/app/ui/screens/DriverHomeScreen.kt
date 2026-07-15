@@ -406,6 +406,19 @@ fun DriverHomeScreen(viewModel: DriverShiftViewModel = viewModel()) {
                         )
                     }
                     Spacer(modifier = Modifier.height(8.dp))
+                    Card(modifier = Modifier.fillMaxWidth()) {
+                        Column(modifier = Modifier.padding(16.dp)) {
+                            Text(text = "Sync service", fontWeight = FontWeight.Bold)
+                            Text(text = "Active mode: Demo validation")
+                            Text(text = "Production HTTPS contract v1: ready")
+                            Text(
+                                text = "Activation requires the production server URL and an " +
+                                    "authenticated access token.",
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(8.dp))
                     Text(
                         text = if (state.isDemoServerAvailable) {
                             "Demo server: online"
