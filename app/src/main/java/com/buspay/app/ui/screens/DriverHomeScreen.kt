@@ -411,6 +411,7 @@ fun DriverHomeScreen(viewModel: DriverShiftViewModel = viewModel()) {
                             Text(text = "Sync service", fontWeight = FontWeight.Bold)
                             Text(text = "Active mode: Demo validation")
                             Text(text = "Production HTTPS contract v1: ready")
+                            Text(text = "Reference API/database: implemented • deployment pending")
                             Text(
                                 text = "Activation requires the production server URL and an " +
                                     "authenticated access token.",

@@ -1,0 +1,24 @@
+{
+  "contractVersion": 1,
+  "requestId": "sync-1111222233334444",
+  "sentAtMillis": 1784100000000,
+  "shifts": [
+    {
+      "id": "shift-module-12-sample",
+      "driverId": "driver-001",
+      "busId": "bus-001",
+      "routeId": "route-001",
+      "startedAtMillis": 1784099400000,
+      "endedAtMillis": 1784100000000
+    }
+  ],
+  "tickets": [
+    {
+      "id": "ticket-module-12-sample",
+      "shiftId": "shift-module-12-sample",
+      "fareTypeId": "standard",
+      "priceCents": 50,
+      "soldAtMillis": 1784099700000
+    }
+  ]
+}
