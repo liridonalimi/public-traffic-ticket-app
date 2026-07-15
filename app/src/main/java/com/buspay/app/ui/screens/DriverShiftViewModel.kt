@@ -9,6 +9,9 @@ import androidx.lifecycle.viewModelScope
 import com.buspay.app.data.DemoTransitData
 import com.buspay.app.data.DemoTransitSyncClient
 import com.buspay.app.data.OfflineFirstRepository
+import com.buspay.app.data.SyncRuntimeConfig
+import com.buspay.app.data.SyncRuntimeMode
+import com.buspay.app.data.createTransitSyncClient
 import com.buspay.app.device.AndroidGpsTracker
 import com.buspay.app.device.BluetoothEscPosTicketPrinter
 import com.buspay.app.device.DemoStopRequestInput
@@ -68,6 +71,7 @@ data class DriverShiftUiState(
     val pendingShiftCount: Int = 0,
     val syncableTicketCount: Int = 0,
     val isSyncing: Boolean = false,
+    val isDemoSyncMode: Boolean = true,
     val isDemoServerAvailable: Boolean = true,
     val syncMessage: String? = null,
     val adminReport: AdminReport? = null,
@@ -109,7 +113,9 @@ class DriverShiftViewModel(application: Application) : AndroidViewModel(applicat
     private val pdfTicketPrinter = PdfTicketPrinter(application.applicationContext)
     private val gpsTracker = AndroidGpsTracker(application.applicationContext)
     private val stopRequestInput = DemoStopRequestInput()
-    private val syncClient = DemoTransitSyncClient()
+    private val syncRuntimeConfig = SyncRuntimeConfig.demo()
+    private val syncClient = createTransitSyncClient(syncRuntimeConfig)
+    private val demoSyncClient = syncClient as? DemoTransitSyncClient
 
     var uiState by mutableStateOf(createInitialState())
         private set
@@ -276,10 +282,11 @@ class DriverShiftViewModel(application: Application) : AndroidViewModel(applicat
 
     fun toggleDemoServerAvailability() {
         if (uiState.isSyncing) return
-        syncClient.isAvailable = !syncClient.isAvailable
+        val demoClient = demoSyncClient ?: return
+        demoClient.isAvailable = !demoClient.isAvailable
         uiState = uiState.copy(
-            isDemoServerAvailable = syncClient.isAvailable,
-            syncMessage = if (syncClient.isAvailable) {
+            isDemoServerAvailable = demoClient.isAvailable,
+            syncMessage = if (demoClient.isAvailable) {
                 "Demo server is online"
             } else {
                 "Demo server is offline"
@@ -460,6 +467,8 @@ class DriverShiftViewModel(application: Application) : AndroidViewModel(applicat
             pendingTicketCount = repository.pendingTicketCount(),
             pendingShiftCount = repository.pendingShiftCount(),
             syncableTicketCount = repository.pendingTicketsForSync(restoredShift?.id).size,
+            isDemoSyncMode = syncRuntimeConfig.mode == SyncRuntimeMode.DEMO,
+            isDemoServerAvailable = demoSyncClient?.isAvailable == true,
             adminReport = createAdminReport(activeShiftId = restoredShift?.id)
         )
     }
@@ -546,7 +555,7 @@ class DriverShiftViewModel(application: Application) : AndroidViewModel(applicat
             pendingShiftCount = repository.pendingShiftCount(),
             syncableTicketCount = repository.pendingTicketsForSync(uiState.activeShift?.id).size,
             isSyncing = false,
-            isDemoServerAvailable = syncClient.isAvailable,
+            isDemoServerAvailable = demoSyncClient?.isAvailable == true,
             syncMessage = message,
             adminReport = createAdminReport()
         )

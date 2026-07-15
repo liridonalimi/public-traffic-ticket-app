@@ -10,3 +10,6 @@ app/build/
 __pycache__/
 *.py[cod]
 server/data/
+deployment/secrets/*.txt
+!deployment/secrets/*.example
+deployment/backups/

@@ -1,0 +1,12 @@
+.git
+.gradle
+.idea
+.kotlin
+app
+build
+docs
+deployment/backups
+deployment/secrets/*.txt
+local.properties
+**/__pycache__
+**/*.py[cod]

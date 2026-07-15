@@ -5,17 +5,13 @@ from pathlib import Path
 import ssl
 from wsgiref.simple_server import make_server
 
-from .application import BusPayApplication
-from .database import SyncDatabase
+from .runtime import create_application
 
 
 def main() -> None:
-    token = os.environ.get("BUSPAY_SYNC_TOKEN", "")
-    if not token:
-        raise SystemExit("BUSPAY_SYNC_TOKEN is required")
     host = os.environ.get("BUSPAY_HOST", "127.0.0.1")
     port = int(os.environ.get("BUSPAY_PORT", "8080"))
-    database_path = os.environ.get(
+    os.environ.setdefault(
         "BUSPAY_DB_PATH",
         str(Path(__file__).resolve().parents[1] / "data" / "buspay.db"),
     )
@@ -24,7 +20,7 @@ def main() -> None:
     if bool(certificate_path) != bool(private_key_path):
         raise SystemExit("BUSPAY_TLS_CERT and BUSPAY_TLS_KEY must be supplied together")
 
-    application = BusPayApplication(SyncDatabase(database_path), token)
+    application = create_application()
     server = make_server(host, port, application)
     scheme = "http"
     if certificate_path and private_key_path:

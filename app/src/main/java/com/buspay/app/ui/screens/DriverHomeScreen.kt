@@ -409,9 +409,16 @@ fun DriverHomeScreen(viewModel: DriverShiftViewModel = viewModel()) {
                     Card(modifier = Modifier.fillMaxWidth()) {
                         Column(modifier = Modifier.padding(16.dp)) {
                             Text(text = "Sync service", fontWeight = FontWeight.Bold)
-                            Text(text = "Active mode: Demo validation")
+                            Text(
+                                text = if (state.isDemoSyncMode) {
+                                    "Active mode: Demo validation"
+                                } else {
+                                    "Active mode: Production HTTPS"
+                                }
+                            )
                             Text(text = "Production HTTPS contract v1: ready")
                             Text(text = "Reference API/database: implemented • deployment pending")
+                            Text(text = "Deployment package: ready • infrastructure selection pending")
                             Text(
                                 text = "Activation requires the production server URL and an " +
                                     "authenticated access token.",
@@ -421,7 +428,9 @@ fun DriverHomeScreen(viewModel: DriverShiftViewModel = viewModel()) {
                     }
                     Spacer(modifier = Modifier.height(8.dp))
                     Text(
-                        text = if (state.isDemoServerAvailable) {
+                        text = if (!state.isDemoSyncMode) {
+                            "Production service: configured"
+                        } else if (state.isDemoServerAvailable) {
                             "Demo server: online"
                         } else {
                             "Demo server: offline"
@@ -437,11 +446,13 @@ fun DriverHomeScreen(viewModel: DriverShiftViewModel = viewModel()) {
                     ) {
                         OutlinedButton(
                             onClick = viewModel::toggleDemoServerAvailability,
-                            enabled = !state.isSyncing,
+                            enabled = !state.isSyncing && state.isDemoSyncMode,
                             modifier = Modifier.weight(1f)
                         ) {
                             Text(
-                                if (state.isDemoServerAvailable) {
+                                if (!state.isDemoSyncMode) {
+                                    "Production Mode"
+                                } else if (state.isDemoServerAvailable) {
                                     "Go Offline"
                                 } else {
                                     "Go Online"

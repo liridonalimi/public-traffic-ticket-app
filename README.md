@@ -30,6 +30,8 @@ It currently includes:
 - cleartext blocking and safe acknowledgement/error handling for production sync
 - authenticated reference sync API with transactional SQLite persistence
 - idempotent server ingestion and synchronized reporting projection
+- hardened provider-neutral container deployment package with health and secret controls
+- integrity-checked database backup/restore and Android runtime client selection
 - cash ticket count and cash total during an active shift
 - persistent local active shift storage
 - persistent local ticket storage for future sync
@@ -52,6 +54,7 @@ It currently includes:
 10. Admin reporting dashboard data contract - complete
 11. Authenticated HTTPS sync client foundation - complete
 12. Persistent sync API and database service - complete
+13. Production deployment package and runtime activation boundary - complete
 
 ## Documentation
 
@@ -69,6 +72,7 @@ Presentation documentation:
 - English: `docs/EN/10-admin-reporting-data-contract.md`
 - English: `docs/EN/11-authenticated-https-sync-client.md`
 - English: `docs/EN/12-persistent-sync-api-and-database.md`
+- English: `docs/EN/13-production-deployment-package.md`
 - Albanian: `docs/SQ/01-themeli-i-projektit-dhe-skeleti-android.md`
 - Albanian: `docs/SQ/02-rrjedha-e-turnit-te-shoferit.md`
 - Albanian: `docs/SQ/03-ruajtja-lokale-e-biletave.md`
@@ -81,6 +85,7 @@ Presentation documentation:
 - Albanian: `docs/SQ/10-kontrata-e-raportimit-administrativ.md`
 - Albanian: `docs/SQ/11-klienti-i-autentikuar-i-sinkronizimit-https.md`
 - Albanian: `docs/SQ/12-api-dhe-baza-e-qendrueshme-e-sinkronizimit.md`
+- Albanian: `docs/SQ/13-paketa-e-vendosjes-ne-prodhim.md`
 
 Technical documentation:
 
@@ -96,14 +101,15 @@ Technical documentation:
 - `docs/TECHNICAL/10-admin-reporting-data-contract.md`
 - `docs/TECHNICAL/11-authenticated-https-sync-client.md`
 - `docs/TECHNICAL/12-persistent-sync-api-and-database.md`
+- `docs/TECHNICAL/13-production-deployment-package.md`
 
 ## Next build milestone
 
-Continue production integration:
+Production integration continues with:
 
-1. Select infrastructure and deploy the sync service with managed TLS/database/identity.
+1. Supply infrastructure/domain/identity ownership and deploy a staging environment.
 2. Build the web dashboard against reporting contract version 1.
-3. Add privacy, audit, export, backup, monitoring, and deployment controls.
+3. Add privacy, audit, export, monitoring, and production governance controls.
 
 #######################################
 
@@ -139,6 +145,8 @@ Aktualisht përfshin:
 - bllokimin e trafikut të pakriptuar dhe trajtimin e sigurt të konfirmimeve/gabimeve
 - API-në referuese të autentikuar me ruajtje transaksionale SQLite
 - pranimin idempotent në server dhe projektimin e raportimit të sinkronizuar
+- paketën e fortifikuar të container-it me health checks dhe kontroll të sekreteve
+- backup/restore me integritet dhe zgjedhjen e klientit Android gjatë ekzekutimit
 - numërimin e biletave me para të gatshme dhe totalin e arkës gjatë turnit aktiv
 - ruajtjen lokale të turnit aktiv
 - ruajtjen lokale të biletave për sinkronizim të ardhshëm
@@ -161,11 +169,12 @@ Aktualisht përfshin:
 10. Kontrata e të dhënave për raportim në panelin administrativ - përfunduar
 11. Baza e klientit të autentikuar për sinkronizim HTTPS - përfunduar
 12. API dhe baza e qëndrueshme e sinkronizimit - përfunduar
+13. Paketa e vendosjes dhe kufiri i aktivizimit në prodhim - përfunduar
 
 ## Pika e ndërtimit tjetër
 
-Vazhdoni integrimin në prodhim:
+Integrimi në prodhim vazhdon me:
 
-1. Zgjidhni infrastrukturën dhe vendosni shërbimin me TLS, bazë dhe identitet të menaxhuar.
+1. Siguroni infrastrukturën/domain-in/identitetin dhe vendosni mjedisin staging.
 2. Ndërtojeni panelin web sipas versionit 1 të kontratës.
-3. Shtoni privatësinë, auditimin, eksportin, backup-in, monitorimin dhe kontrollet e vendosjes.
+3. Shtoni privatësinë, auditimin, eksportin, monitorimin dhe qeverisjen e prodhimit.
