@@ -36,6 +36,9 @@ It currently includes:
 - reconciled fare, driver, shift, ticket, revenue, search, and filter views
 - session-only Android sync-server configuration with debug loopback validation
 - end-to-end Android-to-Docker synchronization through an authenticated adb bridge
+- provider-neutral staging Compose profile with private ingress-only exposure
+- fail-closed staging preflight for HTTPS, immutable images, protected secrets, retention, and named owners
+- authenticated, non-mutating staging smoke validation with negative-token verification
 - cash ticket count and cash total during an active shift
 - persistent local active shift storage
 - persistent local ticket storage for future sync
@@ -61,6 +64,7 @@ It currently includes:
 13. Production deployment package and runtime activation boundary - complete
 14. Authenticated administrative web reporting dashboard - complete
 15. Android-to-server live synchronization activation - complete
+16. Staging release readiness and operational validation - ready for double-test
 
 ## Documentation
 
@@ -81,6 +85,7 @@ Presentation documentation:
 - English: `docs/EN/13-production-deployment-package.md`
 - English: `docs/EN/14-admin-web-reporting-dashboard.md`
 - English: `docs/EN/15-android-to-server-live-sync.md`
+- English: `docs/EN/16-staging-release-readiness.md`
 - Albanian: `docs/SQ/01-themeli-i-projektit-dhe-skeleti-android.md`
 - Albanian: `docs/SQ/02-rrjedha-e-turnit-te-shoferit.md`
 - Albanian: `docs/SQ/03-ruajtja-lokale-e-biletave.md`
@@ -96,6 +101,7 @@ Presentation documentation:
 - Albanian: `docs/SQ/13-paketa-e-vendosjes-ne-prodhim.md`
 - Albanian: `docs/SQ/14-paneli-web-i-raportimit-administrativ.md`
 - Albanian: `docs/SQ/15-sinkronizimi-live-android-me-serverin.md`
+- Albanian: `docs/SQ/16-gatishmeria-e-publikimit-staging.md`
 
 Technical documentation:
 
@@ -114,12 +120,13 @@ Technical documentation:
 - `docs/TECHNICAL/13-production-deployment-package.md`
 - `docs/TECHNICAL/14-admin-web-reporting-dashboard.md`
 - `docs/TECHNICAL/15-android-to-server-live-sync.md`
+- `docs/TECHNICAL/16-staging-release-readiness.md`
 
 ## Next build milestone
 
 Production integration continues with:
 
-1. Supply infrastructure/domain/identity ownership and deploy a staging environment.
+1. Select the infrastructure, registry, domain, TLS ingress, and accountable owners; then run the first hosted staging deployment with the Module 16 release gate.
 2. Replace the shared pilot token with role-based, short-lived administrative identity.
 3. Add privacy, audit, export, monitoring, pagination, and production governance controls.
 
@@ -163,6 +170,9 @@ Aktualisht përfshin:
 - pamjet e rakorduara për tarifat, shoferët, turnet, biletat, të ardhurat, kërkimin dhe filtrat
 - konfigurimin vetëm për sesion të serverit të sinkronizimit në Android me validim lokal debug
 - sinkronizimin Android-Docker nga fillimi në fund përmes urës së autentikuar adb
+- profilin staging të pavarur nga ofruesi me ekspozim vetëm përmes ingress-it privat
+- kontrollin staging që dështon në mënyrë të sigurt për HTTPS, imazhin e pandryshueshëm, sekretet, ruajtjen dhe pronarët
+- kontrollin e autentikuar dhe pa ndryshim të të dhënave pas publikimit, përfshirë token-in e gabuar
 - numërimin e biletave me para të gatshme dhe totalin e arkës gjatë turnit aktiv
 - ruajtjen lokale të turnit aktiv
 - ruajtjen lokale të biletave për sinkronizim të ardhshëm
@@ -188,11 +198,12 @@ Aktualisht përfshin:
 13. Paketa e vendosjes dhe kufiri i aktivizimit në prodhim - përfunduar
 14. Paneli web administrativ i autentikuar për raportim - përfunduar
 15. Aktivizimi i sinkronizimit live Android-server - përfunduar
+16. Gatishmëria e publikimit staging dhe validimi operacional - gati për testim të dyfishtë
 
 ## Pika e ndërtimit tjetër
 
 Integrimi në prodhim vazhdon me:
 
-1. Siguroni infrastrukturën/domain-in/identitetin dhe vendosni mjedisin staging.
+1. Zgjidhni infrastrukturën, regjistrin, domain-in, TLS ingress dhe pronarët përgjegjës; pastaj kryeni publikimin e parë staging me kontrollin e Modulit 16.
 2. Zëvendësoni token-in e përbashkët të pilotit me identitet administrativ jetëshkurtër dhe sipas roleve.
 3. Shtoni privatësinë, auditimin, eksportin, monitorimin, faqosjen dhe qeverisjen e prodhimit.

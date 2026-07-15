@@ -1,0 +1,49 @@
+services:
+  buspay-sync:
+    image: ${BUSPAY_IMAGE:?Set BUSPAY_IMAGE to an immutable image digest}
+    environment:
+      BUSPAY_DB_PATH: /data/buspay.db
+      BUSPAY_SYNC_TOKEN_FILE: /run/secrets/buspay_sync_token
+      BUSPAY_WEB_WORKERS: ${BUSPAY_WEB_WORKERS:-2}
+      BUSPAY_WEB_THREADS: ${BUSPAY_WEB_THREADS:-4}
+    secrets:
+      - buspay_sync_token
+    volumes:
+      - buspay-staging-data:/data
+      - buspay-staging-backups:/backups
+    expose:
+      - "8080"
+    networks:
+      - edge
+    read_only: true
+    tmpfs:
+      - /tmp:size=16m,mode=1777
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    restart: unless-stopped
+    stop_grace_period: 40s
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import json,urllib.request; assert json.load(urllib.request.urlopen('http://127.0.0.1:8080/health', timeout=3))['status']=='ok'"
+      interval: 30s
+      timeout: 5s
+      start_period: 10s
+      retries: 3
+
+volumes:
+  buspay-staging-data:
+  buspay-staging-backups:
+
+secrets:
+  buspay_sync_token:
+    file: ${BUSPAY_SYNC_TOKEN_FILE:?Set BUSPAY_SYNC_TOKEN_FILE to a protected secret file}
+
+networks:
+  edge:
+    external: true
+    name: ${BUSPAY_EDGE_NETWORK:?Set BUSPAY_EDGE_NETWORK to the private ingress network}
