@@ -1,0 +1,153 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <title>BusPay Control</title>
+  <link rel="stylesheet" href="/admin/assets/admin.css">
+  <script src="/admin/assets/admin.js" defer></script>
+</head>
+<body>
+  <a class="skip-link" href="#main-content">Skip to dashboard</a>
+  <header class="site-header">
+    <a class="brand" href="/admin" aria-label="BusPay Control home">
+      <span class="brand-mark" aria-hidden="true">BP</span>
+      <span>
+        <strong>BusPay</strong>
+        <small>Operations control</small>
+      </span>
+    </a>
+    <div class="connection-state" id="connection-state" data-state="locked">
+      <span class="state-dot" aria-hidden="true"></span>
+      <span id="connection-label">Locked</span>
+    </div>
+  </header>
+
+  <main id="main-content">
+    <section class="hero" aria-labelledby="page-title">
+      <div>
+        <p class="eyebrow">Contract v1 reporting</p>
+        <h1 id="page-title">The network, reconciled.</h1>
+        <p class="hero-copy">Review synchronized shifts, ticket revenue, drivers, and fares from one operational view.</p>
+      </div>
+      <p class="generated-time" id="generated-time">Connect to load the latest report.</p>
+    </section>
+
+    <section class="auth-card" id="auth-panel" aria-labelledby="auth-title">
+      <div>
+        <p class="eyebrow">Protected access</p>
+        <h2 id="auth-title">Connect to the reporting API</h2>
+        <p>Your bearer token is held only in this page's memory. It is never placed in the URL or browser storage.</p>
+      </div>
+      <form id="auth-form" class="auth-form">
+        <label for="token-input">API access token</label>
+        <div class="token-row">
+          <input id="token-input" name="token" type="password" autocomplete="off" spellcheck="false" required>
+          <button class="primary-button" type="submit" id="connect-button">Connect</button>
+        </div>
+        <p class="form-status" id="auth-status" role="status" aria-live="polite"></p>
+      </form>
+    </section>
+
+    <div id="dashboard" hidden>
+      <section class="toolbar" aria-label="Dashboard actions">
+        <div>
+          <p class="eyebrow">Live reporting</p>
+          <h2>Operations overview</h2>
+        </div>
+        <div class="toolbar-actions">
+          <button class="secondary-button" type="button" id="refresh-button">Refresh report</button>
+          <button class="quiet-button" type="button" id="sign-out-button">Sign out</button>
+        </div>
+      </section>
+
+      <p class="dashboard-status" id="dashboard-status" role="status" aria-live="polite"></p>
+
+      <section class="metric-grid" aria-label="Overall totals">
+        <article class="metric-card metric-card-accent">
+          <p>Revenue</p>
+          <strong id="metric-revenue">EUR 0.00</strong>
+          <span>Reconciled cash</span>
+        </article>
+        <article class="metric-card">
+          <p>Tickets</p>
+          <strong id="metric-tickets">0</strong>
+          <span>Synchronized sales</span>
+        </article>
+        <article class="metric-card">
+          <p>Closed shifts</p>
+          <strong id="metric-shifts">0</strong>
+          <span>Reported operations</span>
+        </article>
+        <article class="metric-card">
+          <p>Drivers</p>
+          <strong id="metric-drivers">0</strong>
+          <span>Active in this dataset</span>
+        </article>
+      </section>
+
+      <section class="content-grid">
+        <article class="panel fare-panel" aria-labelledby="fare-title">
+          <div class="panel-heading">
+            <div>
+              <p class="eyebrow">Revenue mix</p>
+              <h2 id="fare-title">Fares</h2>
+            </div>
+          </div>
+          <div id="fare-list" class="fare-list"></div>
+        </article>
+
+        <article class="panel" aria-labelledby="driver-title">
+          <div class="panel-heading">
+            <div>
+              <p class="eyebrow">Accountability</p>
+              <h2 id="driver-title">Drivers</h2>
+            </div>
+          </div>
+          <div class="table-scroll">
+            <table>
+              <thead><tr><th>Driver</th><th>Shifts</th><th>Tickets</th><th>Revenue</th></tr></thead>
+              <tbody id="driver-table-body"></tbody>
+            </table>
+          </div>
+        </article>
+      </section>
+
+      <section class="panel shift-panel" aria-labelledby="shift-title">
+        <div class="panel-heading shift-heading">
+          <div>
+            <p class="eyebrow">Audit-ready detail</p>
+            <h2 id="shift-title">Shift ledger</h2>
+          </div>
+          <div class="filter-group" aria-label="Shift filters">
+            <label>
+              <span>Driver</span>
+              <select id="driver-filter"><option value="">All drivers</option></select>
+            </label>
+            <label>
+              <span>Fare</span>
+              <select id="fare-filter"><option value="">All fares</option></select>
+            </label>
+            <label>
+              <span>Search</span>
+              <input id="shift-search" type="search" placeholder="Shift, bus, route…" autocomplete="off">
+            </label>
+          </div>
+        </div>
+        <p class="result-count" id="shift-result-count"></p>
+        <div id="shift-list" class="shift-list"></div>
+        <div class="empty-state" id="empty-state" hidden>
+          <strong>No shifts match these filters.</strong>
+          <span>Change a filter or refresh the report.</span>
+        </div>
+      </section>
+    </div>
+  </main>
+
+  <footer>
+    <span>BusPay Control</span>
+    <span>Reporting contract v1</span>
+  </footer>
+</body>
+</html>

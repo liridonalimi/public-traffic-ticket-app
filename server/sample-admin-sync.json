@@ -1,0 +1,53 @@
+{
+  "contractVersion": 1,
+  "requestId": "sync-2222333344445555",
+  "sentAtMillis": 1784119200000,
+  "shifts": [
+    {
+      "id": "shift-admin-001",
+      "driverId": "driver-001",
+      "busId": "01-101-KS",
+      "routeId": "line-1",
+      "startedAtMillis": 1784103000000,
+      "endedAtMillis": 1784106600000
+    },
+    {
+      "id": "shift-admin-002",
+      "driverId": "driver-001",
+      "busId": "01-318-KS",
+      "routeId": "line-2",
+      "startedAtMillis": 1784110200000,
+      "endedAtMillis": 1784113800000
+    },
+    {
+      "id": "shift-admin-003",
+      "driverId": "driver-002",
+      "busId": "01-205-KS",
+      "routeId": "line-1",
+      "startedAtMillis": 1784104800000,
+      "endedAtMillis": 1784109300000
+    },
+    {
+      "id": "shift-admin-004",
+      "driverId": "driver-003",
+      "busId": "01-417-KS",
+      "routeId": "line-2",
+      "startedAtMillis": 1784112000000,
+      "endedAtMillis": 1784117400000
+    }
+  ],
+  "tickets": [
+    {"id": "ticket-admin-001", "shiftId": "shift-admin-001", "fareTypeId": "standard", "priceCents": 50, "soldAtMillis": 1784103300000},
+    {"id": "ticket-admin-002", "shiftId": "shift-admin-001", "fareTypeId": "student", "priceCents": 30, "soldAtMillis": 1784103900000},
+    {"id": "ticket-admin-003", "shiftId": "shift-admin-001", "fareTypeId": "child", "priceCents": 20, "soldAtMillis": 1784104500000},
+    {"id": "ticket-admin-004", "shiftId": "shift-admin-002", "fareTypeId": "standard", "priceCents": 50, "soldAtMillis": 1784110500000},
+    {"id": "ticket-admin-005", "shiftId": "shift-admin-002", "fareTypeId": "standard", "priceCents": 50, "soldAtMillis": 1784111100000},
+    {"id": "ticket-admin-006", "shiftId": "shift-admin-002", "fareTypeId": "senior", "priceCents": 25, "soldAtMillis": 1784111700000},
+    {"id": "ticket-admin-007", "shiftId": "shift-admin-003", "fareTypeId": "student", "priceCents": 30, "soldAtMillis": 1784105100000},
+    {"id": "ticket-admin-008", "shiftId": "shift-admin-003", "fareTypeId": "student", "priceCents": 30, "soldAtMillis": 1784105700000},
+    {"id": "ticket-admin-009", "shiftId": "shift-admin-003", "fareTypeId": "child", "priceCents": 20, "soldAtMillis": 1784106300000},
+    {"id": "ticket-admin-010", "shiftId": "shift-admin-004", "fareTypeId": "standard", "priceCents": 50, "soldAtMillis": 1784112300000},
+    {"id": "ticket-admin-011", "shiftId": "shift-admin-004", "fareTypeId": "senior", "priceCents": 25, "soldAtMillis": 1784112900000},
+    {"id": "ticket-admin-012", "shiftId": "shift-admin-004", "fareTypeId": "child", "priceCents": 20, "soldAtMillis": 1784113500000}
+  ]
+}

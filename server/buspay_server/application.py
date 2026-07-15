@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hmac
 import json
+from pathlib import Path
 from typing import Any, Callable, Dict, Iterable, Tuple
 
 from .contract import CONTRACT_VERSION, ContractError, parse_sync_batch
@@ -11,6 +12,13 @@ from .database import SyncDatabase
 
 
 MAX_REQUEST_BYTES = 1_000_000
+WEB_ROOT = Path(__file__).with_name("web")
+ADMIN_ASSETS = {
+    "/admin": ("admin.html", "text/html; charset=utf-8"),
+    "/admin/": ("admin.html", "text/html; charset=utf-8"),
+    "/admin/assets/admin.css": ("admin.css", "text/css; charset=utf-8"),
+    "/admin/assets/admin.js": ("admin.js", "text/javascript; charset=utf-8"),
+}
 StartResponse = Callable[[str, list], None]
 
 
@@ -40,6 +48,11 @@ class BusPayApplication:
     def _dispatch(self, environ: Dict[str, Any]) -> Tuple[str, list, bytes]:
         method = environ.get("REQUEST_METHOD", "GET").upper()
         path = environ.get("PATH_INFO", "/")
+        if path in ADMIN_ASSETS:
+            if method != "GET":
+                return self._method_not_allowed("GET")
+            filename, content_type = ADMIN_ASSETS[path]
+            return self._static_response(WEB_ROOT / filename, content_type)
         if method == "GET" and path == "/health":
             return self._json_response(
                 200,
@@ -140,3 +153,20 @@ class BusPayApplication:
         ]
         headers.extend(extra_headers or [])
         return f"{status_code} {status_text}", headers, body
+
+    @staticmethod
+    def _static_response(path: Path, content_type: str):
+        body = path.read_bytes()
+        headers = [
+            ("Content-Type", content_type),
+            ("Content-Length", str(len(body))),
+            ("Cache-Control", "no-store"),
+            ("X-Content-Type-Options", "nosniff"),
+            ("Content-Security-Policy", "default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src 'self' data:; base-uri 'none'; form-action 'none'; frame-ancestors 'none'"),
+            ("Referrer-Policy", "no-referrer"),
+            ("X-Frame-Options", "DENY"),
+            ("Permissions-Policy", "camera=(), geolocation=(), microphone=()"),
+            ("Cross-Origin-Opener-Policy", "same-origin"),
+            ("Cross-Origin-Resource-Policy", "same-origin"),
+        ]
+        return "200 OK", headers, body

@@ -96,6 +96,18 @@ class DatabaseTest(unittest.TestCase):
 
         self.assertEqual(0, self.database.report()["overall"]["ticketCount"])
 
+    def test_admin_dashboard_sample_reconciles_expected_totals(self):
+        sample_path = Path(__file__).resolve().parents[1] / "sample-admin-sync.json"
+        sample = json.loads(sample_path.read_text(encoding="utf-8"))
+
+        self.database.ingest(parse_sync_batch(sample))
+        report = self.database.report()
+
+        self.assertEqual(3, report["overall"]["driverCount"])
+        self.assertEqual(4, report["overall"]["shiftCount"])
+        self.assertEqual(12, report["overall"]["ticketCount"])
+        self.assertEqual(400, report["overall"]["cashTotalCents"])
+
 
 class ApplicationTest(unittest.TestCase):
     def setUp(self):
@@ -103,6 +115,27 @@ class ApplicationTest(unittest.TestCase):
         self.application = BusPayApplication(self.database, TOKEN)
 
     def request(
+        self,
+        method,
+        path,
+        payload=None,
+        token=None,
+        content_type="application/json",
+        contract_version="1",
+        idempotency_key=None,
+    ):
+        status, headers, body = self.request_raw(
+            method,
+            path,
+            payload,
+            token,
+            content_type,
+            contract_version,
+            idempotency_key,
+        )
+        return status, headers, json.loads(body)
+
+    def request_raw(
         self,
         method,
         path,
@@ -133,7 +166,7 @@ class ApplicationTest(unittest.TestCase):
             captured["headers"] = dict(headers)
 
         body = b"".join(self.application(environ, start_response))
-        return int(captured["status"].split()[0]), captured["headers"], json.loads(body)
+        return int(captured["status"].split()[0]), captured["headers"], body
 
     def test_health_is_public_and_reports_database_readiness(self):
         status, _, body = self.request("GET", "/health")
@@ -141,6 +174,35 @@ class ApplicationTest(unittest.TestCase):
         self.assertEqual(200, status)
         self.assertEqual("ok", body["status"])
         self.assertEqual("ready", body["database"])
+
+    def test_admin_dashboard_assets_are_public_but_hardened(self):
+        html_status, html_headers, html = self.request_raw("GET", "/admin")
+        css_status, css_headers, css = self.request_raw("GET", "/admin/assets/admin.css")
+        js_status, js_headers, javascript = self.request_raw("GET", "/admin/assets/admin.js")
+
+        self.assertEqual(200, html_status)
+        self.assertEqual(200, css_status)
+        self.assertEqual(200, js_status)
+        self.assertEqual("text/html; charset=utf-8", html_headers["Content-Type"])
+        self.assertEqual("text/css; charset=utf-8", css_headers["Content-Type"])
+        self.assertEqual("text/javascript; charset=utf-8", js_headers["Content-Type"])
+        self.assertIn("default-src 'none'", html_headers["Content-Security-Policy"])
+        self.assertIn("connect-src 'self'", html_headers["Content-Security-Policy"])
+        self.assertEqual("DENY", html_headers["X-Frame-Options"])
+        self.assertEqual("no-referrer", html_headers["Referrer-Policy"])
+        self.assertIn(b"BusPay Control", html)
+        self.assertIn(b"/admin/assets/admin.css", html)
+        self.assertIn(b"/v1/reports/admin", javascript)
+        self.assertIn(b"Authorization", javascript)
+        self.assertNotIn(b"localStorage", javascript)
+        self.assertNotIn(b"sessionStorage", javascript)
+        self.assertNotIn(TOKEN.encode("utf-8"), html + css + javascript)
+
+    def test_admin_dashboard_rejects_unsupported_methods(self):
+        status, headers, _ = self.request("POST", "/admin")
+
+        self.assertEqual(405, status)
+        self.assertEqual("GET", headers["Allow"])
 
     def test_sync_and_report_require_valid_bearer_authentication(self):
         missing, missing_headers, _ = self.request("POST", "/v1/sync", batch_payload())
