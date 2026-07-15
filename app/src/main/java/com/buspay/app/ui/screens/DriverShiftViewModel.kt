@@ -1,6 +1,7 @@
 package com.buspay.app.ui.screens
 
 import android.app.Application
+import android.content.pm.ApplicationInfo
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -71,8 +72,13 @@ data class DriverShiftUiState(
     val pendingShiftCount: Int = 0,
     val syncableTicketCount: Int = 0,
     val isSyncing: Boolean = false,
+    val syncRuntimeMode: SyncRuntimeMode = SyncRuntimeMode.DEMO,
     val isDemoSyncMode: Boolean = true,
     val isDemoServerAvailable: Boolean = true,
+    val canUseLocalValidationServer: Boolean = false,
+    val isSyncConfigurationOpen: Boolean = false,
+    val syncEndpointDraft: String = "http://127.0.0.1:8080/v1/sync",
+    val syncTokenDraft: String = "",
     val syncMessage: String? = null,
     val adminReport: AdminReport? = null,
     val lastClosedSummary: DriverShiftSummary? = null,
@@ -113,9 +119,11 @@ class DriverShiftViewModel(application: Application) : AndroidViewModel(applicat
     private val pdfTicketPrinter = PdfTicketPrinter(application.applicationContext)
     private val gpsTracker = AndroidGpsTracker(application.applicationContext)
     private val stopRequestInput = DemoStopRequestInput()
-    private val syncRuntimeConfig = SyncRuntimeConfig.demo()
-    private val syncClient = createTransitSyncClient(syncRuntimeConfig)
-    private val demoSyncClient = syncClient as? DemoTransitSyncClient
+    private val isDebuggable = application.applicationInfo.flags and
+        ApplicationInfo.FLAG_DEBUGGABLE != 0
+    private var syncRuntimeConfig = SyncRuntimeConfig.demo()
+    private var syncClient = createTransitSyncClient(syncRuntimeConfig)
+    private var demoSyncClient = syncClient as? DemoTransitSyncClient
 
     var uiState by mutableStateOf(createInitialState())
         private set
@@ -294,6 +302,79 @@ class DriverShiftViewModel(application: Application) : AndroidViewModel(applicat
         )
     }
 
+    fun toggleSyncConfiguration() {
+        if (uiState.isSyncing) return
+        uiState = uiState.copy(
+            isSyncConfigurationOpen = !uiState.isSyncConfigurationOpen,
+            syncTokenDraft = "",
+            syncMessage = null
+        )
+    }
+
+    fun updateSyncEndpointDraft(value: String) {
+        if (!uiState.isSyncConfigurationOpen) return
+        uiState = uiState.copy(syncEndpointDraft = value, syncMessage = null)
+    }
+
+    fun updateSyncTokenDraft(value: String) {
+        if (!uiState.isSyncConfigurationOpen) return
+        uiState = uiState.copy(syncTokenDraft = value, syncMessage = null)
+    }
+
+    fun activateConfiguredSyncServer() {
+        if (uiState.isSyncing || !uiState.isSyncConfigurationOpen) return
+        val endpoint = uiState.syncEndpointDraft.trim()
+        val token = uiState.syncTokenDraft
+        val config = runCatching {
+            val candidate = if (endpoint.startsWith("https://", ignoreCase = true)) {
+                SyncRuntimeConfig.production(endpoint, token)
+            } else {
+                check(isDebuggable) { "Loopback HTTP is available only in a debug build" }
+                SyncRuntimeConfig.localValidation(endpoint, token)
+            }
+            createTransitSyncClient(candidate)
+            candidate
+        }.getOrElse { failure ->
+            uiState = uiState.copy(
+                syncTokenDraft = "",
+                syncMessage = "Server configuration rejected: " +
+                    (failure.message ?: "invalid endpoint or token")
+            )
+            return
+        }
+
+        syncRuntimeConfig = config
+        syncClient = createTransitSyncClient(config)
+        demoSyncClient = null
+        uiState = uiState.copy(
+            syncRuntimeMode = config.mode,
+            isDemoSyncMode = false,
+            isDemoServerAvailable = false,
+            isSyncConfigurationOpen = false,
+            syncTokenDraft = "",
+            syncMessage = if (config.mode == SyncRuntimeMode.LOCAL_VALIDATION) {
+                "Local validation server configured. Close a shift, then press Sync Now."
+            } else {
+                "Production HTTPS server configured for this app session."
+            }
+        )
+    }
+
+    fun useDemoSyncMode() {
+        if (uiState.isSyncing) return
+        syncRuntimeConfig = SyncRuntimeConfig.demo()
+        syncClient = createTransitSyncClient(syncRuntimeConfig)
+        demoSyncClient = syncClient as DemoTransitSyncClient
+        uiState = uiState.copy(
+            syncRuntimeMode = SyncRuntimeMode.DEMO,
+            isDemoSyncMode = true,
+            isDemoServerAvailable = demoSyncClient?.isAvailable == true,
+            isSyncConfigurationOpen = false,
+            syncTokenDraft = "",
+            syncMessage = "Demo validation mode restored"
+        )
+    }
+
     fun syncPendingData() {
         if (uiState.isSyncing) return
         val shifts = repository.pendingClosedShifts()
@@ -467,8 +548,10 @@ class DriverShiftViewModel(application: Application) : AndroidViewModel(applicat
             pendingTicketCount = repository.pendingTicketCount(),
             pendingShiftCount = repository.pendingShiftCount(),
             syncableTicketCount = repository.pendingTicketsForSync(restoredShift?.id).size,
+            syncRuntimeMode = syncRuntimeConfig.mode,
             isDemoSyncMode = syncRuntimeConfig.mode == SyncRuntimeMode.DEMO,
             isDemoServerAvailable = demoSyncClient?.isAvailable == true,
+            canUseLocalValidationServer = isDebuggable,
             adminReport = createAdminReport(activeShiftId = restoredShift?.id)
         )
     }

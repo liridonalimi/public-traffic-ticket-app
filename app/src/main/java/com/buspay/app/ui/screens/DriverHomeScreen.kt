@@ -26,8 +26,10 @@ import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -51,6 +53,7 @@ import com.buspay.app.domain.AdminReport
 import com.buspay.app.domain.Driver
 import com.buspay.app.domain.FareType
 import com.buspay.app.domain.Route
+import com.buspay.app.data.SyncRuntimeMode
 import java.io.File
 import java.text.DateFormat
 import java.util.Date
@@ -410,30 +413,87 @@ fun DriverHomeScreen(viewModel: DriverShiftViewModel = viewModel()) {
                         Column(modifier = Modifier.padding(16.dp)) {
                             Text(text = "Sync service", fontWeight = FontWeight.Bold)
                             Text(
-                                text = if (state.isDemoSyncMode) {
-                                    "Active mode: Demo validation"
-                                } else {
-                                    "Active mode: Production HTTPS"
+                                text = when (state.syncRuntimeMode) {
+                                    SyncRuntimeMode.DEMO -> "Active mode: Demo validation"
+                                    SyncRuntimeMode.LOCAL_VALIDATION ->
+                                        "Active mode: Local server validation"
+                                    SyncRuntimeMode.PRODUCTION -> "Active mode: Production HTTPS"
                                 }
                             )
                             Text(text = "Production HTTPS contract v1: ready")
                             Text(text = "Reference API/database: implemented • deployment pending")
                             Text(text = "Deployment package: ready • infrastructure selection pending")
                             Text(
-                                text = "Activation requires the production server URL and an " +
-                                    "authenticated access token.",
+                                text = if (state.canUseLocalValidationServer) {
+                                    "Debug builds can use loopback HTTP through adb reverse. " +
+                                        "Production connections still require HTTPS."
+                                } else {
+                                    "Activation requires an HTTPS server URL and an " +
+                                        "authenticated access token."
+                                },
                                 style = MaterialTheme.typography.bodySmall
                             )
                         }
                     }
                     Spacer(modifier = Modifier.height(8.dp))
+                    OutlinedButton(
+                        onClick = viewModel::toggleSyncConfiguration,
+                        enabled = !state.isSyncing,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(if (state.isSyncConfigurationOpen) "Cancel Server Setup" else "Configure Sync Server")
+                    }
+                    if (state.isSyncConfigurationOpen) {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Card(modifier = Modifier.fillMaxWidth()) {
+                            Column(modifier = Modifier.padding(16.dp)) {
+                                Text(text = "Authenticated sync server", fontWeight = FontWeight.Bold)
+                                Spacer(modifier = Modifier.height(8.dp))
+                                OutlinedTextField(
+                                    value = state.syncEndpointDraft,
+                                    onValueChange = viewModel::updateSyncEndpointDraft,
+                                    label = { Text("Sync endpoint") },
+                                    placeholder = { Text("https://server.example/v1/sync") },
+                                    singleLine = true,
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+                                Spacer(modifier = Modifier.height(8.dp))
+                                OutlinedTextField(
+                                    value = state.syncTokenDraft,
+                                    onValueChange = viewModel::updateSyncTokenDraft,
+                                    label = { Text("Access token") },
+                                    visualTransformation = PasswordVisualTransformation(),
+                                    singleLine = true,
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Text(
+                                    text = "The token stays only in this running app session and " +
+                                        "is cleared from this field after activation.",
+                                    style = MaterialTheme.typography.bodySmall
+                                )
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Button(
+                                    onClick = viewModel::activateConfiguredSyncServer,
+                                    enabled = state.syncEndpointDraft.isNotBlank() &&
+                                        state.syncTokenDraft.isNotBlank(),
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Text("Activate Server")
+                                }
+                            }
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(8.dp))
                     Text(
-                        text = if (!state.isDemoSyncMode) {
-                            "Production service: configured"
-                        } else if (state.isDemoServerAvailable) {
-                            "Demo server: online"
-                        } else {
-                            "Demo server: offline"
+                        text = when (state.syncRuntimeMode) {
+                            SyncRuntimeMode.LOCAL_VALIDATION -> "Local validation server: configured"
+                            SyncRuntimeMode.PRODUCTION -> "Production service: configured"
+                            SyncRuntimeMode.DEMO -> if (state.isDemoServerAvailable) {
+                                "Demo server: online"
+                            } else {
+                                "Demo server: offline"
+                            }
                         }
                     )
                     state.syncMessage?.let { message ->
@@ -445,13 +505,17 @@ fun DriverHomeScreen(viewModel: DriverShiftViewModel = viewModel()) {
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         OutlinedButton(
-                            onClick = viewModel::toggleDemoServerAvailability,
-                            enabled = !state.isSyncing && state.isDemoSyncMode,
+                            onClick = if (state.isDemoSyncMode) {
+                                viewModel::toggleDemoServerAvailability
+                            } else {
+                                viewModel::useDemoSyncMode
+                            },
+                            enabled = !state.isSyncing,
                             modifier = Modifier.weight(1f)
                         ) {
                             Text(
                                 if (!state.isDemoSyncMode) {
-                                    "Production Mode"
+                                    "Use Demo Mode"
                                 } else if (state.isDemoServerAvailable) {
                                     "Go Offline"
                                 } else {

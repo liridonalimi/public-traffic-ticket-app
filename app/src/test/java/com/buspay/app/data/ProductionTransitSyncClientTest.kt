@@ -44,6 +44,19 @@ class ProductionTransitSyncClientTest {
     }
 
     @Test
+    fun `local validation configuration accepts loopback HTTP only`() {
+        val config = ProductionSyncConfig.localValidation(
+            endpointUrl = "http://localhost:8080/v1/sync",
+            accessToken = "local-token"
+        )
+
+        assertEquals("http://localhost:8080/v1/sync", config.endpointUrl)
+        assertFailsLocalConfiguration("http://192.168.1.20:8080/v1/sync")
+        assertFailsLocalConfiguration("http://sync.example.test/v1/sync")
+        assertFailsLocalConfiguration("http://user@localhost:8080/v1/sync")
+    }
+
+    @Test
     fun `request uses authentication idempotency and contract version`() = runBlocking {
         val transport = RecordingTransport { request ->
             SyncHttpResponse(statusCode = 200, body = acknowledgement(requestId = "sync-placeholder"))
@@ -167,6 +180,13 @@ class ProductionTransitSyncClientTest {
     private fun assertFailsConfiguration(endpointUrl: String, accessToken: String) {
         val failure = runCatching {
             ProductionSyncConfig(endpointUrl = endpointUrl, accessToken = accessToken)
+        }.exceptionOrNull()
+        assertTrue(failure is IllegalArgumentException)
+    }
+
+    private fun assertFailsLocalConfiguration(endpointUrl: String) {
+        val failure = runCatching {
+            ProductionSyncConfig.localValidation(endpointUrl, "local-token")
         }.exceptionOrNull()
         assertTrue(failure is IllegalArgumentException)
     }

@@ -4,6 +4,7 @@ import com.buspay.app.domain.SyncAcknowledgement
 import com.buspay.app.domain.SyncBatch
 import com.buspay.app.domain.SyncResult
 import java.io.IOException
+import java.net.HttpURLConnection
 import java.net.URI
 import javax.net.ssl.HttpsURLConnection
 import kotlinx.coroutines.Dispatchers
@@ -13,13 +14,17 @@ class ProductionSyncConfig(
     val endpointUrl: String,
     val accessToken: String,
     val connectTimeoutMillis: Int = DEFAULT_CONNECT_TIMEOUT_MILLIS,
-    val readTimeoutMillis: Int = DEFAULT_READ_TIMEOUT_MILLIS
+    val readTimeoutMillis: Int = DEFAULT_READ_TIMEOUT_MILLIS,
+    internal val allowLoopbackHttp: Boolean = false
 ) {
     init {
         val endpoint = runCatching { URI(endpointUrl) }
             .getOrElse { throw IllegalArgumentException("Sync endpoint must be a valid HTTPS URL") }
-        require(endpoint.scheme.equals("https", ignoreCase = true)) {
-            "Sync endpoint must use HTTPS"
+        require(
+            endpoint.scheme.equals("https", ignoreCase = true) ||
+                (allowLoopbackHttp && endpoint.isLoopbackHttp())
+        ) {
+            "Sync endpoint must use HTTPS; debug validation may use loopback HTTP only"
         }
         require(!endpoint.host.isNullOrBlank() && endpoint.userInfo == null && endpoint.fragment == null) {
             "Sync endpoint must be an absolute HTTPS URL without credentials or a fragment"
@@ -39,6 +44,19 @@ class ProductionSyncConfig(
         const val DEFAULT_CONNECT_TIMEOUT_MILLIS = 10_000
         const val DEFAULT_READ_TIMEOUT_MILLIS = 20_000
         const val MAX_TIMEOUT_MILLIS = 60_000
+
+        fun localValidation(
+            endpointUrl: String,
+            accessToken: String,
+            connectTimeoutMillis: Int = DEFAULT_CONNECT_TIMEOUT_MILLIS,
+            readTimeoutMillis: Int = DEFAULT_READ_TIMEOUT_MILLIS
+        ): ProductionSyncConfig = ProductionSyncConfig(
+            endpointUrl = endpointUrl,
+            accessToken = accessToken,
+            connectTimeoutMillis = connectTimeoutMillis,
+            readTimeoutMillis = readTimeoutMillis,
+            allowLoopbackHttp = true
+        )
     }
 }
 
@@ -59,11 +77,19 @@ fun interface SyncHttpTransport {
     suspend fun execute(request: SyncHttpRequest): SyncHttpResponse
 }
 
-class HttpsUrlConnectionSyncTransport : SyncHttpTransport {
+class UrlConnectionSyncTransport(
+    private val allowLoopbackHttp: Boolean = false
+) : SyncHttpTransport {
     override suspend fun execute(request: SyncHttpRequest): SyncHttpResponse =
         withContext(Dispatchers.IO) {
-            val connection = URI(request.endpointUrl).toURL().openConnection()
-            require(connection is HttpsURLConnection) { "Only HTTPS connections are allowed" }
+            val endpoint = URI(request.endpointUrl)
+            val connection = endpoint.toURL().openConnection()
+            require(
+                connection is HttpsURLConnection ||
+                    (allowLoopbackHttp && endpoint.isLoopbackHttp() && connection is HttpURLConnection)
+            ) { "Only HTTPS connections or debug loopback HTTP are allowed" }
+
+            connection as HttpURLConnection
 
             try {
                 connection.requestMethod = "POST"
@@ -99,7 +125,9 @@ class HttpsUrlConnectionSyncTransport : SyncHttpTransport {
 
 class ProductionTransitSyncClient(
     private val config: ProductionSyncConfig,
-    private val transport: SyncHttpTransport = HttpsUrlConnectionSyncTransport(),
+    private val transport: SyncHttpTransport = UrlConnectionSyncTransport(
+        allowLoopbackHttp = config.allowLoopbackHttp
+    ),
     private val clockMillis: () -> Long = System::currentTimeMillis
 ) : TransitSyncClient {
     override suspend fun sync(batch: SyncBatch): SyncResult {
@@ -159,6 +187,15 @@ class ProductionTransitSyncClient(
         const val CONTRACT_VERSION = 1
     }
 }
+
+private fun URI.isLoopbackHttp(): Boolean =
+    scheme.equals("http", ignoreCase = true) &&
+        (host.equals("127.0.0.1", ignoreCase = true) ||
+            host.equals("localhost", ignoreCase = true) ||
+            host == "::1" ||
+            host == "[::1]") &&
+        userInfo == null &&
+        fragment == null
 
 private fun SyncBatch.toContractJson(sentAtMillis: Long): String = buildString {
     append('{')

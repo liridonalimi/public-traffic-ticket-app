@@ -34,6 +34,8 @@ It currently includes:
 - integrity-checked database backup/restore and Android runtime client selection
 - responsive authenticated administrative web dashboard served by the reporting API
 - reconciled fare, driver, shift, ticket, revenue, search, and filter views
+- session-only Android sync-server configuration with debug loopback validation
+- end-to-end Android-to-Docker synchronization through an authenticated adb bridge
 - cash ticket count and cash total during an active shift
 - persistent local active shift storage
 - persistent local ticket storage for future sync
@@ -58,6 +60,7 @@ It currently includes:
 12. Persistent sync API and database service - complete
 13. Production deployment package and runtime activation boundary - complete
 14. Authenticated administrative web reporting dashboard - complete
+15. Android-to-server live synchronization activation - complete
 
 ## Documentation
 
@@ -77,6 +80,7 @@ Presentation documentation:
 - English: `docs/EN/12-persistent-sync-api-and-database.md`
 - English: `docs/EN/13-production-deployment-package.md`
 - English: `docs/EN/14-admin-web-reporting-dashboard.md`
+- English: `docs/EN/15-android-to-server-live-sync.md`
 - Albanian: `docs/SQ/01-themeli-i-projektit-dhe-skeleti-android.md`
 - Albanian: `docs/SQ/02-rrjedha-e-turnit-te-shoferit.md`
 - Albanian: `docs/SQ/03-ruajtja-lokale-e-biletave.md`
@@ -91,6 +95,7 @@ Presentation documentation:
 - Albanian: `docs/SQ/12-api-dhe-baza-e-qendrueshme-e-sinkronizimit.md`
 - Albanian: `docs/SQ/13-paketa-e-vendosjes-ne-prodhim.md`
 - Albanian: `docs/SQ/14-paneli-web-i-raportimit-administrativ.md`
+- Albanian: `docs/SQ/15-sinkronizimi-live-android-me-serverin.md`
 
 Technical documentation:
 
@@ -108,6 +113,7 @@ Technical documentation:
 - `docs/TECHNICAL/12-persistent-sync-api-and-database.md`
 - `docs/TECHNICAL/13-production-deployment-package.md`
 - `docs/TECHNICAL/14-admin-web-reporting-dashboard.md`
+- `docs/TECHNICAL/15-android-to-server-live-sync.md`
 
 ## Next build milestone
 
@@ -155,6 +161,8 @@ Aktualisht përfshin:
 - backup/restore me integritet dhe zgjedhjen e klientit Android gjatë ekzekutimit
 - panelin web administrativ responsiv dhe të autentikuar, të shërbyer nga API-ja e raportimit
 - pamjet e rakorduara për tarifat, shoferët, turnet, biletat, të ardhurat, kërkimin dhe filtrat
+- konfigurimin vetëm për sesion të serverit të sinkronizimit në Android me validim lokal debug
+- sinkronizimin Android-Docker nga fillimi në fund përmes urës së autentikuar adb
 - numërimin e biletave me para të gatshme dhe totalin e arkës gjatë turnit aktiv
 - ruajtjen lokale të turnit aktiv
 - ruajtjen lokale të biletave për sinkronizim të ardhshëm
@@ -178,7 +186,8 @@ Aktualisht përfshin:
 11. Baza e klientit të autentikuar për sinkronizim HTTPS - përfunduar
 12. API dhe baza e qëndrueshme e sinkronizimit - përfunduar
 13. Paketa e vendosjes dhe kufiri i aktivizimit në prodhim - përfunduar
-14. Paneli web i autentikuar për raportim administrativ - përfunduar
+14. Paneli web administrativ i autentikuar për raportim - përfunduar
+15. Aktivizimi i sinkronizimit live Android-server - përfunduar
 
 ## Pika e ndërtimit tjetër
 

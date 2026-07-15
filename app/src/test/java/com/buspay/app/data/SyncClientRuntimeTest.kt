@@ -21,6 +21,28 @@ class SyncClientRuntimeTest {
         assertTrue(client is ProductionTransitSyncClient)
     }
 
+    @Test
+    fun `local validation runtime creates authenticated client for loopback`() {
+        val client = createTransitSyncClient(
+            SyncRuntimeConfig.localValidation(
+                endpointUrl = "http://127.0.0.1:8080/v1/sync",
+                accessToken = "local-token"
+            )
+        )
+
+        assertTrue(client is ProductionTransitSyncClient)
+    }
+
+    @Test(expected = IllegalArgumentException::class)
+    fun `local validation runtime rejects non loopback cleartext endpoint`() {
+        createTransitSyncClient(
+            SyncRuntimeConfig.localValidation(
+                endpointUrl = "http://192.168.1.10:8080/v1/sync",
+                accessToken = "local-token"
+            )
+        )
+    }
+
     @Test(expected = IllegalArgumentException::class)
     fun `production runtime rejects cleartext endpoint`() {
         createTransitSyncClient(
@@ -34,5 +56,10 @@ class SyncClientRuntimeTest {
     @Test(expected = IllegalArgumentException::class)
     fun `production runtime requires authenticated session values`() {
         createTransitSyncClient(SyncRuntimeConfig(mode = SyncRuntimeMode.PRODUCTION))
+    }
+
+    @Test(expected = IllegalArgumentException::class)
+    fun `local validation runtime requires authenticated session values`() {
+        createTransitSyncClient(SyncRuntimeConfig(mode = SyncRuntimeMode.LOCAL_VALIDATION))
     }
 }
