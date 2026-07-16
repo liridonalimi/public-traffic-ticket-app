@@ -14,6 +14,7 @@ import android.location.LocationListener
 import android.location.LocationManager
 import android.os.Looper
 import android.os.Environment
+import com.buspay.app.R
 import com.google.zxing.BarcodeFormat
 import com.google.zxing.EncodeHintType
 import com.google.zxing.qrcode.QRCodeWriter
@@ -119,7 +120,7 @@ interface TicketPrinter {
     suspend fun printTicket(printer: PrinterDevice, ticket: PrintableTicket): PrintResult
 }
 
-class BluetoothEscPosTicketPrinter(context: Context) : TicketPrinter {
+class BluetoothEscPosTicketPrinter(private val context: Context) : TicketPrinter {
     private val bluetoothAdapter: BluetoothAdapter? = context
         .getSystemService(BluetoothManager::class.java)
         ?.adapter
@@ -132,7 +133,8 @@ class BluetoothEscPosTicketPrinter(context: Context) : TicketPrinter {
         return adapter.bondedDevices
             .map { device ->
                 PrinterDevice(
-                    name = device.name?.takeIf(String::isNotBlank) ?: "Bluetooth printer",
+                    name = device.name?.takeIf(String::isNotBlank)
+                        ?: context.getString(R.string.bluetooth_printer),
                     address = device.address
                 )
             }
@@ -145,9 +147,11 @@ class BluetoothEscPosTicketPrinter(context: Context) : TicketPrinter {
         ticket: PrintableTicket
     ): PrintResult = withContext(Dispatchers.IO) {
         val adapter = bluetoothAdapter
-            ?: return@withContext PrintResult.Failure("Bluetooth is not available")
+            ?: return@withContext PrintResult.Failure(
+                context.getString(R.string.bluetooth_unavailable)
+            )
         if (!adapter.isEnabled) {
-            return@withContext PrintResult.Failure("Bluetooth is turned off")
+            return@withContext PrintResult.Failure(context.getString(R.string.bluetooth_off))
         }
 
         val socket = try {
@@ -156,7 +160,7 @@ class BluetoothEscPosTicketPrinter(context: Context) : TicketPrinter {
                 .createRfcommSocketToServiceRecord(SERIAL_PORT_PROFILE_UUID)
         } catch (error: Exception) {
             return@withContext PrintResult.Failure(
-                error.message ?: "Could not open the selected printer"
+                error.message ?: context.getString(R.string.printer_open_failed)
             )
         }
 
@@ -168,7 +172,9 @@ class BluetoothEscPosTicketPrinter(context: Context) : TicketPrinter {
             }
             PrintResult.Success()
         } catch (error: Exception) {
-            PrintResult.Failure(error.message ?: "The printer did not accept the ticket")
+            PrintResult.Failure(
+                error.message ?: context.getString(R.string.printer_rejected_ticket)
+            )
         } finally {
             runCatching { socket.close() }
         }
@@ -182,14 +188,16 @@ class BluetoothEscPosTicketPrinter(context: Context) : TicketPrinter {
 }
 
 class PdfTicketPrinter(private val context: Context) : TicketPrinter {
-    override fun pairedPrinters(): List<PrinterDevice> = listOf(TEST_DEVICE)
+    override fun pairedPrinters(): List<PrinterDevice> = listOf(
+        TEST_DEVICE.copy(name = context.getString(R.string.pdf_test_printer))
+    )
 
     override suspend fun printTicket(
         printer: PrinterDevice,
         ticket: PrintableTicket
     ): PrintResult = withContext(Dispatchers.IO) {
         if (printer.address != TEST_DEVICE.address) {
-            return@withContext PrintResult.Failure("Unknown PDF test printer")
+            return@withContext PrintResult.Failure(context.getString(R.string.unknown_pdf_printer))
         }
 
         val outputDirectory = context
@@ -197,7 +205,7 @@ class PdfTicketPrinter(private val context: Context) : TicketPrinter {
             ?.resolve("tickets")
             ?: context.filesDir.resolve("tickets")
         if (!outputDirectory.exists() && !outputDirectory.mkdirs()) {
-            return@withContext PrintResult.Failure("Could not create the PDF ticket folder")
+            return@withContext PrintResult.Failure(context.getString(R.string.pdf_folder_failed))
         }
 
         val safeTicketCode = ticket.ticketCode.replace(Regex("[^A-Za-z0-9_-]"), "_")
@@ -207,7 +215,7 @@ class PdfTicketPrinter(private val context: Context) : TicketPrinter {
             writeTicketPdf(outputFile, ticket)
             PrintResult.Success(outputPath = outputFile.absolutePath)
         } catch (error: Exception) {
-            PrintResult.Failure(error.message ?: "Could not create the ticket PDF")
+            PrintResult.Failure(error.message ?: context.getString(R.string.pdf_creation_failed))
         }
     }
 

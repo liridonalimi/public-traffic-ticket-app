@@ -1,6 +1,8 @@
 package com.buspay.app.ui.screens
 
 import android.content.ActivityNotFoundException
+import android.app.Activity
+import android.app.Application
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -37,10 +39,14 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.pluralStringResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -48,6 +54,10 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
+import androidx.annotation.StringRes
+import com.buspay.app.R
+import com.buspay.app.AppLanguage
+import com.buspay.app.AppLanguageManager
 import com.buspay.app.device.PdfTicketPrinter
 import com.buspay.app.device.PrinterDevice
 import com.buspay.app.domain.Bus
@@ -55,10 +65,13 @@ import com.buspay.app.domain.AdminReport
 import com.buspay.app.domain.Driver
 import com.buspay.app.domain.FareType
 import com.buspay.app.domain.Route
+import com.buspay.app.domain.ReportingSyncStatus
 import com.buspay.app.data.SyncRuntimeMode
 import java.io.File
 import java.text.DateFormat
 import java.util.Date
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 @Composable
 fun DriverHomeScreen(viewModel: DriverShiftViewModel = viewModel()) {
@@ -66,7 +79,7 @@ fun DriverHomeScreen(viewModel: DriverShiftViewModel = viewModel()) {
     val context = LocalContext.current
     var showPassengerDisplay by remember { mutableStateOf(false) }
     var showAdminReport by remember { mutableStateOf(false) }
-    var workspace by remember { mutableStateOf(PilotWorkspace.DRIVER) }
+    var workspace by rememberSaveable { mutableStateOf(PilotWorkspace.DRIVER) }
     var showEndShiftConfirmation by remember { mutableStateOf(false) }
     var hasBluetoothPermission by remember {
         mutableStateOf(hasBluetoothPrinterPermission(context))
@@ -107,7 +120,7 @@ fun DriverHomeScreen(viewModel: DriverShiftViewModel = viewModel()) {
                     report = state.adminReport,
                     onRefresh = { viewModel.refreshAdminReport() },
                     onBackToDriverConsole = { showAdminReport = false },
-                    backLabel = "Back to Operations Tools"
+                    backLabel = R.string.back_operations_tools
                 )
             } else {
                 OperationsToolsScreen(
@@ -128,7 +141,7 @@ fun DriverHomeScreen(viewModel: DriverShiftViewModel = viewModel()) {
                 report = state.adminReport,
                 onRefresh = { viewModel.refreshAdminReport() },
                 onBackToDriverConsole = { showAdminReport = false },
-                backLabel = "Back to Driver Console"
+                backLabel = R.string.back_driver_console
             )
             return@MaterialTheme
         }
@@ -156,12 +169,12 @@ fun DriverHomeScreen(viewModel: DriverShiftViewModel = viewModel()) {
                         .padding(bottom = 20.dp)
                 ) {
                     Text(
-                        text = "Driver Console",
+                        text = stringResource(R.string.driver_console),
                         fontSize = 28.sp,
                         fontWeight = FontWeight.Bold
                     )
                     Text(
-                        text = "BusPay native pilot",
+                        text = stringResource(R.string.native_pilot),
                         style = MaterialTheme.typography.bodyLarge
                     )
 
@@ -176,20 +189,22 @@ fun DriverHomeScreen(viewModel: DriverShiftViewModel = viewModel()) {
                         ) {
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(
-                                    text = driverShiftStatus(state),
+                                    text = localizedDriverShiftStatus(state),
                                     fontWeight = FontWeight.Bold
                                 )
                                 Text(
                                     text = if (state.isShiftActive) {
-                                        "Stay on this screen while serving passengers"
+                                        stringResource(R.string.stay_on_driver_screen)
                                     } else {
-                                        "Confirm driver, bus, and route before departure"
+                                        stringResource(R.string.confirm_departure_details)
                                     },
                                     style = MaterialTheme.typography.bodySmall
                                 )
                             }
                             Text(
-                                text = if (state.isShiftActive) "IN SERVICE" else "PILOT",
+                                text = stringResource(
+                                    if (state.isShiftActive) R.string.in_service else R.string.pilot
+                                ),
                                 color = MaterialTheme.colorScheme.primary,
                                 fontWeight = FontWeight.Bold
                             )
@@ -198,12 +213,13 @@ fun DriverHomeScreen(viewModel: DriverShiftViewModel = viewModel()) {
 
                     Spacer(modifier = Modifier.height(24.dp))
 
-                    Text(text = "Driver", fontWeight = FontWeight.Bold)
+                    Text(text = stringResource(R.string.driver), fontWeight = FontWeight.Bold)
                     if (state.signedInDriver == null) {
                         Spacer(modifier = Modifier.height(8.dp))
                         SelectorCard(
-                            title = "Sign in driver",
-                            selectedText = state.selectedDriver?.name ?: "Select driver",
+                            title = stringResource(R.string.sign_in_driver),
+                            selectedText = state.selectedDriver?.name
+                                ?: stringResource(R.string.select_driver),
                             enabled = !state.isShiftActive,
                             items = state.availableDrivers,
                             itemText = Driver::name,
@@ -215,12 +231,12 @@ fun DriverHomeScreen(viewModel: DriverShiftViewModel = viewModel()) {
                             enabled = state.selectedDriver != null,
                             modifier = Modifier.fillMaxWidth()
                         ) {
-                            Text("Sign In")
+                            Text(stringResource(R.string.sign_in))
                         }
                     } else {
                         state.signedInDriver?.let { driver ->
                             Text(text = driver.name)
-                            Text(text = "ID: ${driver.id}")
+                            Text(text = stringResource(R.string.id_value, driver.id))
                         }
 
                         if (!state.isShiftActive) {
@@ -229,7 +245,7 @@ fun DriverHomeScreen(viewModel: DriverShiftViewModel = viewModel()) {
                                 onClick = viewModel::signOutDriver,
                                 modifier = Modifier.fillMaxWidth()
                             ) {
-                                Text("Sign Out")
+                                Text(stringResource(R.string.sign_out))
                             }
                         }
                     }
@@ -237,8 +253,9 @@ fun DriverHomeScreen(viewModel: DriverShiftViewModel = viewModel()) {
                     Spacer(modifier = Modifier.height(16.dp))
 
                     SelectorCard(
-                        title = "Bus",
-                        selectedText = state.selectedBus?.plateNumber ?: "Select bus",
+                        title = stringResource(R.string.bus),
+                        selectedText = state.selectedBus?.plateNumber
+                            ?: stringResource(R.string.select_bus),
                         enabled = !state.isShiftActive,
                         items = state.buses,
                         itemText = Bus::plateNumber,
@@ -248,8 +265,9 @@ fun DriverHomeScreen(viewModel: DriverShiftViewModel = viewModel()) {
                     Spacer(modifier = Modifier.height(12.dp))
 
                     SelectorCard(
-                        title = "Route",
-                        selectedText = state.selectedRoute?.name ?: "Select route",
+                        title = stringResource(R.string.route),
+                        selectedText = state.selectedRoute?.name
+                            ?: stringResource(R.string.select_route),
                         enabled = !state.isShiftActive,
                         items = state.routes,
                         itemText = Route::name,
@@ -258,12 +276,12 @@ fun DriverHomeScreen(viewModel: DriverShiftViewModel = viewModel()) {
 
                     Spacer(modifier = Modifier.height(12.dp))
 
-                    Text(text = "Ticket printer", fontWeight = FontWeight.Bold)
+                    Text(text = stringResource(R.string.ticket_printer), fontWeight = FontWeight.Bold)
                     Spacer(modifier = Modifier.height(8.dp))
                     SelectorCard(
-                        title = "Ticket output",
+                        title = stringResource(R.string.ticket_output),
                         selectedText = state.selectedPrinter?.let(::printerDisplayName)
-                            ?: "Select printer",
+                            ?: stringResource(R.string.select_printer),
                         enabled = !state.isPrinting && state.pairedPrinters.isNotEmpty(),
                         items = state.pairedPrinters,
                         itemText = ::printerDisplayName,
@@ -276,10 +294,10 @@ fun DriverHomeScreen(viewModel: DriverShiftViewModel = viewModel()) {
                             enabled = !state.isPrinting,
                             modifier = Modifier.fillMaxWidth()
                         ) {
-                            Text("Refresh Paired Printers")
+                            Text(stringResource(R.string.refresh_paired_printers))
                         }
                     } else {
-                        Text("PDF testing works without Bluetooth. Allow Bluetooth only for a physical printer.")
+                        Text(stringResource(R.string.pdf_without_bluetooth))
                         Spacer(modifier = Modifier.height(8.dp))
                         Button(
                             onClick = {
@@ -287,7 +305,7 @@ fun DriverHomeScreen(viewModel: DriverShiftViewModel = viewModel()) {
                             },
                             modifier = Modifier.fillMaxWidth()
                         ) {
-                            Text("Allow Bluetooth Printer")
+                            Text(stringResource(R.string.allow_bluetooth_printer))
                         }
                     }
 
@@ -302,18 +320,22 @@ fun DriverHomeScreen(viewModel: DriverShiftViewModel = viewModel()) {
                             onClick = { openTicketPdf(context, pdfPath) },
                             modifier = Modifier.fillMaxWidth()
                         ) {
-                            Text("Open Last Ticket PDF")
+                            Text(stringResource(R.string.open_last_ticket_pdf))
                         }
                     }
 
                     if (state.unprintedTickets.isNotEmpty()) {
                         Spacer(modifier = Modifier.height(8.dp))
                         Text(
-                            text = "${state.unprintedTickets.size} ticket(s) waiting to print",
+                            text = pluralStringResource(
+                                R.plurals.tickets_waiting_to_print,
+                                state.unprintedTickets.size,
+                                state.unprintedTickets.size
+                            ),
                             fontWeight = FontWeight.Bold
                         )
                         state.unprintedTickets.last().lastPrintError?.let { error ->
-                            Text(text = "Last error: $error")
+                            Text(text = stringResource(R.string.last_error, error))
                         }
                         Spacer(modifier = Modifier.height(8.dp))
                         OutlinedButton(
@@ -321,27 +343,35 @@ fun DriverHomeScreen(viewModel: DriverShiftViewModel = viewModel()) {
                             enabled = state.selectedPrinter != null && !state.isPrinting,
                             modifier = Modifier.fillMaxWidth()
                         ) {
-                            Text("Retry Last Print")
+                            Text(stringResource(R.string.retry_last_print))
                         }
                     }
 
                     Spacer(modifier = Modifier.height(20.dp))
 
-                    Text(text = "Route progress", fontWeight = FontWeight.Bold)
+                    Text(text = stringResource(R.string.route_progress), fontWeight = FontWeight.Bold)
                     if (state.isShiftActive) {
                         Text(
-                            text = "Current: ${state.routeStopStatus.currentStop?.name ?: "Unknown"}"
+                            text = stringResource(
+                                R.string.current_stop_value,
+                                state.routeStopStatus.currentStop?.name
+                                    ?: stringResource(R.string.unknown)
+                            )
                         )
                         Text(
-                            text = state.routeStopStatus.nextStop?.let { "Next: ${it.name}" }
-                                ?: "Final stop reached"
+                            text = state.routeStopStatus.nextStop?.let {
+                                stringResource(R.string.next_stop_value, it.name)
+                            } ?: stringResource(R.string.final_stop_reached)
                         )
                         state.gpsMessage?.let { Text(text = it) }
                         state.requestedStop?.let { requestedStop ->
                             Spacer(modifier = Modifier.height(8.dp))
                             Card(modifier = Modifier.fillMaxWidth()) {
                                 Column(modifier = Modifier.padding(16.dp)) {
-                                    Text(text = "STOP REQUESTED", fontWeight = FontWeight.Bold)
+                                    Text(
+                                        text = stringResource(R.string.stop_requested),
+                                        fontWeight = FontWeight.Bold
+                                    )
                                     Text(text = requestedStop.name)
                                 }
                             }
@@ -363,7 +393,7 @@ fun DriverHomeScreen(viewModel: DriverShiftViewModel = viewModel()) {
                                 },
                                 modifier = Modifier.fillMaxWidth()
                             ) {
-                                Text("Allow GPS Route Tracking")
+                                Text(stringResource(R.string.allow_gps_tracking))
                             }
                             Spacer(modifier = Modifier.height(8.dp))
                         }
@@ -372,7 +402,7 @@ fun DriverHomeScreen(viewModel: DriverShiftViewModel = viewModel()) {
                             enabled = !state.routeStopStatus.isRouteComplete,
                             modifier = Modifier.fillMaxWidth()
                         ) {
-                            Text("Advance Stop (Demo)")
+                            Text(stringResource(R.string.advance_stop_demo))
                         }
                         Spacer(modifier = Modifier.height(8.dp))
                         OutlinedButton(
@@ -381,51 +411,57 @@ fun DriverHomeScreen(viewModel: DriverShiftViewModel = viewModel()) {
                                 state.activeStopRequest == null,
                             modifier = Modifier.fillMaxWidth()
                         ) {
-                            Text("Press Stop Button (Demo)")
+                            Text(stringResource(R.string.press_stop_button_demo))
                         }
                         Spacer(modifier = Modifier.height(8.dp))
                         Button(
                             onClick = { showPassengerDisplay = true },
                             modifier = Modifier.fillMaxWidth()
                         ) {
-                            Text("Open Passenger Display")
+                            Text(stringResource(R.string.open_passenger_display))
                         }
                     } else {
                         if (state.canOpenPassengerDisplay) {
-                            Text(text = "The last shift has ended")
+                            Text(text = stringResource(R.string.last_shift_ended))
                             Text(
-                                text = "Last stop: " +
-                                    (state.passengerRouteStopStatus.currentStop?.name ?: "Unknown")
+                                text = stringResource(
+                                    R.string.last_stop_value,
+                                    state.passengerRouteStopStatus.currentStop?.name
+                                        ?: stringResource(R.string.unknown)
+                                )
                             )
                             Spacer(modifier = Modifier.height(8.dp))
                             OutlinedButton(
                                 onClick = { showPassengerDisplay = true },
                                 modifier = Modifier.fillMaxWidth()
                             ) {
-                                Text("Open Last Passenger Display")
+                                Text(stringResource(R.string.open_last_passenger_display))
                             }
                         } else {
-                            Text(text = "Start a shift to begin tracking")
+                            Text(text = stringResource(R.string.start_shift_for_tracking))
                         }
                     }
 
                     Spacer(modifier = Modifier.height(20.dp))
 
-                    Text(text = "Current shift tickets", fontWeight = FontWeight.Bold)
+                    Text(
+                        text = stringResource(R.string.current_shift_tickets),
+                        fontWeight = FontWeight.Bold
+                    )
                     Text(text = state.ticketCount.toString())
 
                     Spacer(modifier = Modifier.height(20.dp))
 
-                    Text(text = "Cash total", fontWeight = FontWeight.Bold)
+                    Text(text = stringResource(R.string.cash_total), fontWeight = FontWeight.Bold)
                     Text(text = formatEuroCents(state.cashTotalCents))
 
                     if (state.isShiftActive) {
                         Spacer(modifier = Modifier.height(20.dp))
                         SelectorCard(
-                            title = "Ticket fare",
+                            title = stringResource(R.string.ticket_fare),
                             selectedText = state.selectedFareType?.let {
                                 "${it.name} - ${formatEuroCents(it.priceCents)}"
-                            } ?: "Select fare",
+                            } ?: stringResource(R.string.select_fare),
                             enabled = true,
                             items = state.fareTypes,
                             itemText = { fare: FareType ->
@@ -444,30 +480,46 @@ fun DriverHomeScreen(viewModel: DriverShiftViewModel = viewModel()) {
 
                     if (state.fareTypeSummaries.isNotEmpty()) {
                         Spacer(modifier = Modifier.height(20.dp))
-                        Text(text = "Sales by fare", fontWeight = FontWeight.Bold)
+                        Text(text = stringResource(R.string.sales_by_fare), fontWeight = FontWeight.Bold)
                         state.fareTypeSummaries.forEach { summary ->
                             Text(
-                                text = "${summary.fareName}: ${summary.ticketCount} / " +
+                                text = stringResource(
+                                    R.string.fare_summary,
+                                    summary.fareName,
+                                    summary.ticketCount,
                                     formatEuroCents(summary.cashTotalCents)
+                                )
                             )
                         }
                     }
 
                     Spacer(modifier = Modifier.height(20.dp))
 
-                    Text(text = "Synchronization", fontWeight = FontWeight.Bold)
-                    Text(text = "${state.pendingShiftCount} closed shift(s)")
-                    Text(text = "${state.pendingTicketCount} ticket(s) saved locally")
+                    Text(text = stringResource(R.string.synchronization), fontWeight = FontWeight.Bold)
+                    Text(
+                        text = pluralStringResource(
+                            R.plurals.closed_shifts_count,
+                            state.pendingShiftCount,
+                            state.pendingShiftCount
+                        )
+                    )
+                    Text(
+                        text = pluralStringResource(
+                            R.plurals.local_tickets_count,
+                            state.pendingTicketCount,
+                            state.pendingTicketCount
+                        )
+                    )
                     if (state.isShiftActive &&
                         state.pendingTicketCount > state.syncableTicketCount
                     ) {
                         Text(
-                            text = "Current-shift tickets wait until shift closure",
+                            text = stringResource(R.string.active_shift_tickets_wait),
                             style = MaterialTheme.typography.bodySmall
                         )
                     }
                     Spacer(modifier = Modifier.height(8.dp))
-                    Text(text = driverSyncSummary(state))
+                    Text(text = localizedDriverSyncStatus(state))
                     state.syncMessage?.let { message ->
                         Text(text = message)
                     }
@@ -479,7 +531,15 @@ fun DriverHomeScreen(viewModel: DriverShiftViewModel = viewModel()) {
                                 enabled = !state.isSyncing,
                                 modifier = Modifier.fillMaxWidth()
                             ) {
-                                Text(if (state.isSyncing) "Synchronizing…" else "Sync Closed Shifts")
+                                Text(
+                                    stringResource(
+                                        if (state.isSyncing) {
+                                            R.string.synchronizing
+                                        } else {
+                                            R.string.sync_closed_shifts
+                                        }
+                                    )
+                                )
                             }
                             Spacer(modifier = Modifier.height(8.dp))
                         }
@@ -488,22 +548,32 @@ fun DriverHomeScreen(viewModel: DriverShiftViewModel = viewModel()) {
                             enabled = canOpenOperationsTools(state),
                             modifier = Modifier.fillMaxWidth()
                         ) {
-                            Text("Operations & Setup")
+                            Text(stringResource(R.string.operations_setup))
                         }
                         Text(
-                            text = "Supervisor tools are separated from the driver workflow.",
+                            text = stringResource(R.string.supervisor_tools_separated),
                             style = MaterialTheme.typography.bodySmall
                         )
                     }
 
                     state.lastClosedSummary?.let { summary ->
                         Spacer(modifier = Modifier.height(20.dp))
-                        Text(text = "Last closed shift", fontWeight = FontWeight.Bold)
-                        Text(text = "${summary.ticketCount} tickets / ${formatEuroCents(summary.cashTotalCents)}")
+                        Text(text = stringResource(R.string.last_closed_shift), fontWeight = FontWeight.Bold)
+                        Text(
+                            text = stringResource(
+                                R.string.tickets_and_cash,
+                                summary.ticketCount,
+                                formatEuroCents(summary.cashTotalCents)
+                            )
+                        )
                         summary.fareTypeSummaries.forEach { fareSummary ->
                             Text(
-                                text = "${fareSummary.fareName}: ${fareSummary.ticketCount} / " +
+                                text = stringResource(
+                                    R.string.fare_summary,
+                                    fareSummary.fareName,
+                                    fareSummary.ticketCount,
                                     formatEuroCents(fareSummary.cashTotalCents)
+                                )
                             )
                         }
                     }
@@ -520,7 +590,7 @@ fun DriverHomeScreen(viewModel: DriverShiftViewModel = viewModel()) {
                             enabled = !state.isPrinting && state.unprintedTickets.isEmpty(),
                             modifier = Modifier.weight(1f)
                         ) {
-                            Text("End Shift")
+                            Text(stringResource(R.string.end_shift))
                         }
                     } else {
                         Button(
@@ -530,7 +600,7 @@ fun DriverHomeScreen(viewModel: DriverShiftViewModel = viewModel()) {
                                 state.selectedRoute != null,
                             modifier = Modifier.weight(1f)
                         ) {
-                            Text("Start Shift")
+                            Text(stringResource(R.string.start_shift))
                         }
                     }
 
@@ -541,7 +611,11 @@ fun DriverHomeScreen(viewModel: DriverShiftViewModel = viewModel()) {
                             !state.isPrinting,
                         modifier = Modifier.weight(1f)
                     ) {
-                        Text(if (state.isPrinting) "Printing…" else "Sell Ticket")
+                        Text(
+                            stringResource(
+                                if (state.isPrinting) R.string.printing else R.string.sell_ticket
+                            )
+                        )
                     }
                 }
             }
@@ -550,11 +624,9 @@ fun DriverHomeScreen(viewModel: DriverShiftViewModel = viewModel()) {
         if (showEndShiftConfirmation) {
             AlertDialog(
                 onDismissRequest = { showEndShiftConfirmation = false },
-                title = { Text("End current shift?") },
+                title = { Text(stringResource(R.string.end_shift_question)) },
                 text = {
-                    Text(
-                        "Ticket sales will close and this shift will become ready for synchronization."
-                    )
+                    Text(stringResource(R.string.end_shift_explanation))
                 },
                 confirmButton = {
                     Button(
@@ -563,12 +635,12 @@ fun DriverHomeScreen(viewModel: DriverShiftViewModel = viewModel()) {
                             viewModel.endShift()
                         }
                     ) {
-                        Text("End Shift")
+                        Text(stringResource(R.string.end_shift))
                     }
                 },
                 dismissButton = {
                     TextButton(onClick = { showEndShiftConfirmation = false }) {
-                        Text("Keep Shift Open")
+                        Text(stringResource(R.string.keep_shift_open))
                     }
                 }
             )
@@ -583,6 +655,26 @@ private fun OperationsToolsScreen(
     onOpenAdminReport: () -> Unit,
     onBackToDriverConsole: () -> Unit
 ) {
+    val context = LocalContext.current
+    val coroutineScope = rememberCoroutineScope()
+    var selectedLanguage by remember {
+        mutableStateOf(AppLanguageManager.selectedLanguage(context))
+    }
+    val languageOptions = listOf(
+        AppLanguageOption(
+            language = AppLanguage.SYSTEM,
+            label = stringResource(R.string.language_system_default)
+        ),
+        AppLanguageOption(
+            language = AppLanguage.ALBANIAN,
+            label = stringResource(R.string.language_albanian)
+        ),
+        AppLanguageOption(
+            language = AppLanguage.ENGLISH,
+            label = stringResource(R.string.language_english)
+        )
+    )
+
     Surface(modifier = Modifier.fillMaxSize()) {
         Column(
             modifier = Modifier
@@ -591,53 +683,77 @@ private fun OperationsToolsScreen(
                 .padding(24.dp)
         ) {
             Text(
-                text = "Operations & Setup",
+                text = stringResource(R.string.operations_setup),
                 fontSize = 28.sp,
                 fontWeight = FontWeight.Bold
             )
             Text(
-                text = "Local pilot supervisor workspace",
+                text = stringResource(R.string.local_supervisor_workspace),
                 style = MaterialTheme.typography.bodyLarge
             )
             Spacer(modifier = Modifier.height(12.dp))
+            SelectorCard(
+                title = stringResource(R.string.app_language),
+                selectedText = languageOptions.first { it.language == selectedLanguage }.label,
+                enabled = true,
+                items = languageOptions,
+                itemText = AppLanguageOption::label,
+                onItemSelected = { option ->
+                    selectedLanguage = option.language
+                    coroutineScope.launch {
+                        delay(LANGUAGE_MENU_DISMISS_DELAY_MILLIS)
+                        AppLanguageManager.selectLanguage(
+                            application = context.applicationContext as Application,
+                            selection = option.language
+                        )
+                        (context as? Activity)?.recreate()
+                    }
+                }
+            )
+            Text(
+                text = stringResource(R.string.language_help),
+                style = MaterialTheme.typography.bodySmall
+            )
+
+            Spacer(modifier = Modifier.height(12.dp))
             Card(modifier = Modifier.fillMaxWidth()) {
                 Column(modifier = Modifier.padding(16.dp)) {
-                    Text("Role boundary", fontWeight = FontWeight.Bold)
+                    Text(stringResource(R.string.role_boundary), fontWeight = FontWeight.Bold)
+                    Text(stringResource(R.string.role_boundary_description))
                     Text(
-                        "This area is for supervisors, device setup, and validation. " +
-                            "It is available only between shifts."
-                    )
-                    Text(
-                        "Pilot note: this separation improves workflow but does not replace " +
-                            "production identity and authorization.",
+                        stringResource(R.string.pilot_security_note),
                         style = MaterialTheme.typography.bodySmall
                     )
                 }
             }
 
             Spacer(modifier = Modifier.height(20.dp))
-            Text("Synchronization service", fontSize = 22.sp, fontWeight = FontWeight.Bold)
+            Text(
+                stringResource(R.string.sync_service),
+                fontSize = 22.sp,
+                fontWeight = FontWeight.Bold
+            )
             Spacer(modifier = Modifier.height(8.dp))
             Card(modifier = Modifier.fillMaxWidth()) {
                 Column(modifier = Modifier.padding(16.dp)) {
                     Text(
                         text = when (state.syncRuntimeMode) {
-                            SyncRuntimeMode.DEMO -> "Active mode: Demo validation"
+                            SyncRuntimeMode.DEMO -> stringResource(R.string.active_mode_demo)
                             SyncRuntimeMode.LOCAL_VALIDATION ->
-                                "Active mode: Local server validation"
-                            SyncRuntimeMode.PRODUCTION -> "Active mode: Production HTTPS"
+                                stringResource(R.string.active_mode_local)
+                            SyncRuntimeMode.PRODUCTION ->
+                                stringResource(R.string.active_mode_production)
                         },
                         fontWeight = FontWeight.Bold
                     )
-                    Text("Production HTTPS contract v1: ready")
-                    Text("Reference API/database: implemented • deployment pending")
-                    Text("Deployment package: ready • infrastructure selection pending")
+                    Text(stringResource(R.string.https_contract_ready))
+                    Text(stringResource(R.string.reference_api_status))
+                    Text(stringResource(R.string.deployment_status))
                     Text(
                         text = if (state.canUseLocalValidationServer) {
-                            "Debug builds can use loopback HTTP through adb reverse. " +
-                                "Production connections still require HTTPS."
+                            stringResource(R.string.debug_loopback_note)
                         } else {
-                            "Activation requires an HTTPS server URL and an authenticated token."
+                            stringResource(R.string.production_activation_note)
                         },
                         style = MaterialTheme.typography.bodySmall
                     )
@@ -651,9 +767,9 @@ private fun OperationsToolsScreen(
             ) {
                 Text(
                     if (state.isSyncConfigurationOpen) {
-                        "Cancel Server Setup"
+                        stringResource(R.string.cancel_server_setup)
                     } else {
-                        "Configure Sync Server"
+                        stringResource(R.string.configure_sync_server)
                     }
                 )
             }
@@ -661,13 +777,18 @@ private fun OperationsToolsScreen(
                 Spacer(modifier = Modifier.height(8.dp))
                 Card(modifier = Modifier.fillMaxWidth()) {
                     Column(modifier = Modifier.padding(16.dp)) {
-                        Text("Authenticated sync server", fontWeight = FontWeight.Bold)
+                        Text(
+                            stringResource(R.string.authenticated_sync_server),
+                            fontWeight = FontWeight.Bold
+                        )
                         Spacer(modifier = Modifier.height(8.dp))
                         OutlinedTextField(
                             value = state.syncEndpointDraft,
                             onValueChange = viewModel::updateSyncEndpointDraft,
-                            label = { Text("Sync endpoint") },
-                            placeholder = { Text("https://server.example/v1/sync") },
+                            label = { Text(stringResource(R.string.sync_endpoint)) },
+                            placeholder = {
+                                Text(stringResource(R.string.sync_endpoint_placeholder))
+                            },
                             singleLine = true,
                             modifier = Modifier.fillMaxWidth()
                         )
@@ -675,14 +796,13 @@ private fun OperationsToolsScreen(
                         OutlinedTextField(
                             value = state.syncTokenDraft,
                             onValueChange = viewModel::updateSyncTokenDraft,
-                            label = { Text("Access token") },
+                            label = { Text(stringResource(R.string.access_token)) },
                             visualTransformation = PasswordVisualTransformation(),
                             singleLine = true,
                             modifier = Modifier.fillMaxWidth()
                         )
                         Text(
-                            "The token stays only in this running app session and is cleared " +
-                                "from this field after activation.",
+                            stringResource(R.string.session_token_note),
                             style = MaterialTheme.typography.bodySmall
                         )
                         Spacer(modifier = Modifier.height(8.dp))
@@ -692,14 +812,14 @@ private fun OperationsToolsScreen(
                                 state.syncTokenDraft.isNotBlank(),
                             modifier = Modifier.fillMaxWidth()
                         ) {
-                            Text("Activate Server")
+                            Text(stringResource(R.string.activate_server))
                         }
                     }
                 }
             }
 
             Spacer(modifier = Modifier.height(12.dp))
-            Text(driverSyncSummary(state))
+            Text(localizedDriverSyncStatus(state))
             state.syncMessage?.let { Text(it) }
             Spacer(modifier = Modifier.height(8.dp))
             Row(
@@ -717,11 +837,11 @@ private fun OperationsToolsScreen(
                 ) {
                     Text(
                         if (!state.isDemoSyncMode) {
-                            "Use Demo Mode"
+                            stringResource(R.string.use_demo_mode)
                         } else if (state.isDemoServerAvailable) {
-                            "Go Offline"
+                            stringResource(R.string.go_offline)
                         } else {
-                            "Go Online"
+                            stringResource(R.string.go_online)
                         }
                     )
                 }
@@ -730,17 +850,19 @@ private fun OperationsToolsScreen(
                     enabled = !state.isSyncing,
                     modifier = Modifier.weight(1f)
                 ) {
-                    Text(if (state.isSyncing) "Syncing…" else "Sync Now")
+                    Text(
+                        stringResource(if (state.isSyncing) R.string.syncing else R.string.sync_now)
+                    )
                 }
             }
 
             Spacer(modifier = Modifier.height(20.dp))
-            Text("Reporting", fontSize = 22.sp, fontWeight = FontWeight.Bold)
+            Text(stringResource(R.string.reporting), fontSize = 22.sp, fontWeight = FontWeight.Bold)
             OutlinedButton(
                 onClick = onOpenAdminReport,
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Text("Open Admin Report Preview")
+                Text(stringResource(R.string.open_admin_report))
             }
 
             Spacer(modifier = Modifier.height(24.dp))
@@ -748,18 +870,23 @@ private fun OperationsToolsScreen(
                 onClick = onBackToDriverConsole,
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Text("Return to Driver Console")
+                Text(stringResource(R.string.return_driver_console))
             }
         }
     }
 }
+
+private data class AppLanguageOption(
+    val language: AppLanguage,
+    val label: String
+)
 
 @Composable
 private fun AdminReportScreen(
     report: AdminReport?,
     onRefresh: () -> Unit,
     onBackToDriverConsole: () -> Unit,
-    backLabel: String
+    @StringRes backLabel: Int
 ) {
     Surface(modifier = Modifier.fillMaxSize()) {
         Column(
@@ -769,39 +896,54 @@ private fun AdminReportScreen(
                 .padding(24.dp)
         ) {
             Text(
-                text = "Admin Reporting Preview",
+                text = stringResource(R.string.admin_reporting_preview),
                 fontSize = 28.sp,
                 fontWeight = FontWeight.Bold
             )
             if (report == null) {
                 Spacer(modifier = Modifier.height(16.dp))
-                Text("No report is available")
+                Text(stringResource(R.string.no_report_available))
             } else {
                 Text(
-                    "Contract v${report.contractVersion} • " +
+                    stringResource(
+                        R.string.contract_generated,
+                        report.contractVersion,
                         formatReportDateTime(report.generatedAtMillis)
+                    )
                 )
                 Spacer(modifier = Modifier.height(20.dp))
 
                 Card(modifier = Modifier.fillMaxWidth()) {
                     Column(modifier = Modifier.padding(16.dp)) {
-                        Text("Overall totals", fontWeight = FontWeight.Bold)
-                        Text("Drivers: ${report.totals.driverCount}")
-                        Text("Closed shifts: ${report.totals.shiftCount}")
-                        Text("Tickets: ${report.totals.ticketCount}")
-                        Text("Cash: ${formatEuroCents(report.totals.cashTotalCents)}")
+                        Text(stringResource(R.string.overall_totals), fontWeight = FontWeight.Bold)
+                        Text(stringResource(R.string.drivers_count, report.totals.driverCount))
+                        Text(stringResource(R.string.closed_shifts_value, report.totals.shiftCount))
+                        Text(stringResource(R.string.tickets_value, report.totals.ticketCount))
                         Text(
-                            "Sync: ${report.totals.syncedShiftCount} synced, " +
-                                "${report.totals.partiallySyncedShiftCount} partial, " +
-                                "${report.totals.pendingShiftCount} pending"
+                            stringResource(
+                                R.string.cash_value,
+                                formatEuroCents(report.totals.cashTotalCents)
+                            )
+                        )
+                        Text(
+                            stringResource(
+                                R.string.sync_totals,
+                                report.totals.syncedShiftCount,
+                                report.totals.partiallySyncedShiftCount,
+                                report.totals.pendingShiftCount
+                            )
                         )
                         if (report.totals.fareTypeSummaries.isNotEmpty()) {
                             Spacer(modifier = Modifier.height(8.dp))
-                            Text("Fares", fontWeight = FontWeight.Bold)
+                            Text(stringResource(R.string.fares), fontWeight = FontWeight.Bold)
                             report.totals.fareTypeSummaries.forEach { fare ->
                                 Text(
-                                    "${fare.fareName}: ${fare.ticketCount} / " +
+                                    stringResource(
+                                        R.string.fare_summary,
+                                        fare.fareName,
+                                        fare.ticketCount,
                                         formatEuroCents(fare.cashTotalCents)
+                                    )
                                 )
                             }
                         }
@@ -817,66 +959,126 @@ private fun AdminReportScreen(
                     Spacer(modifier = Modifier.height(12.dp))
                     Card(modifier = Modifier.fillMaxWidth()) {
                         Column(modifier = Modifier.padding(16.dp)) {
-                            Text("Data quality", fontWeight = FontWeight.Bold)
+                            Text(stringResource(R.string.data_quality), fontWeight = FontWeight.Bold)
                             Text(
-                                "Legacy unmatched tickets: ${quality.unmatchedTicketCount} / " +
+                                stringResource(
+                                    R.string.legacy_unmatched_tickets,
+                                    quality.unmatchedTicketCount,
                                     formatEuroCents(quality.unmatchedTicketCashCents)
+                                )
                             )
-                            Text("Unknown-driver shifts: ${quality.unknownDriverShiftCount}")
-                            Text("Unknown-bus shifts: ${quality.unknownBusShiftCount}")
-                            Text("Unknown-route shifts: ${quality.unknownRouteShiftCount}")
+                            Text(
+                                stringResource(
+                                    R.string.unknown_driver_shifts,
+                                    quality.unknownDriverShiftCount
+                                )
+                            )
+                            Text(
+                                stringResource(
+                                    R.string.unknown_bus_shifts,
+                                    quality.unknownBusShiftCount
+                                )
+                            )
+                            Text(
+                                stringResource(
+                                    R.string.unknown_route_shifts,
+                                    quality.unknownRouteShiftCount
+                                )
+                            )
                         }
                     }
                 }
 
                 Spacer(modifier = Modifier.height(20.dp))
-                Text("Drivers", fontSize = 22.sp, fontWeight = FontWeight.Bold)
-                if (report.drivers.isEmpty()) Text("No closed shifts in this report")
+                Text(stringResource(R.string.drivers), fontSize = 22.sp, fontWeight = FontWeight.Bold)
+                if (report.drivers.isEmpty()) Text(stringResource(R.string.no_closed_shifts_report))
                 report.drivers.forEach { driver ->
                     Spacer(modifier = Modifier.height(8.dp))
                     Card(modifier = Modifier.fillMaxWidth()) {
                         Column(modifier = Modifier.padding(16.dp)) {
                             Text(driver.driverName, fontWeight = FontWeight.Bold)
-                            Text("ID: ${driver.driverId}")
-                            Text("Shifts: ${driver.shiftCount}")
-                            Text("Tickets: ${driver.ticketCount}")
-                            Text("Cash: ${formatEuroCents(driver.cashTotalCents)}")
+                            Text(stringResource(R.string.id_value, driver.driverId))
+                            Text(stringResource(R.string.shifts_value, driver.shiftCount))
+                            Text(stringResource(R.string.tickets_value, driver.ticketCount))
+                            Text(
+                                stringResource(
+                                    R.string.cash_value,
+                                    formatEuroCents(driver.cashTotalCents)
+                                )
+                            )
                         }
                     }
                 }
 
                 Spacer(modifier = Modifier.height(20.dp))
-                Text("Shift details", fontSize = 22.sp, fontWeight = FontWeight.Bold)
+                Text(
+                    stringResource(R.string.shift_details),
+                    fontSize = 22.sp,
+                    fontWeight = FontWeight.Bold
+                )
                 report.shifts.forEach { shift ->
                     Spacer(modifier = Modifier.height(8.dp))
                     Card(modifier = Modifier.fillMaxWidth()) {
                         Column(modifier = Modifier.padding(16.dp)) {
                             Text(shift.driverName, fontWeight = FontWeight.Bold)
-                            Text("Shift: ${shift.shiftId}")
-                            Text("Bus: ${shift.busPlateNumber}")
-                            Text("Route: ${shift.routeName}")
-                            Text("Start: ${formatReportDateTime(shift.startedAtMillis)}")
-                            Text("End: ${formatReportDateTime(shift.endedAtMillis)}")
-                            Text("Duration: ${formatDuration(shift.durationMillis)}")
-                            Text("Sync: ${shift.syncStatus.name.replace('_', ' ')}")
+                            Text(stringResource(R.string.shift_value, shift.shiftId))
+                            Text(stringResource(R.string.bus_value, shift.busPlateNumber))
+                            Text(stringResource(R.string.route_value, shift.routeName))
                             Text(
-                                "Tickets: ${shift.ticketCount} / " +
+                                stringResource(
+                                    R.string.start_value,
+                                    formatReportDateTime(shift.startedAtMillis)
+                                )
+                            )
+                            Text(
+                                stringResource(
+                                    R.string.end_value,
+                                    formatReportDateTime(shift.endedAtMillis)
+                                )
+                            )
+                            Text(
+                                stringResource(
+                                    R.string.duration_value,
+                                    formatDuration(shift.durationMillis)
+                                )
+                            )
+                            Text(
+                                stringResource(
+                                    R.string.sync_value,
+                                    localizedReportingSyncStatus(shift.syncStatus)
+                                )
+                            )
+                            Text(
+                                stringResource(
+                                    R.string.tickets_cash_value,
+                                    shift.ticketCount,
                                     formatEuroCents(shift.cashTotalCents)
+                                )
                             )
                             shift.fareTypeSummaries.forEach { fare ->
                                 Text(
-                                    "${fare.fareName}: ${fare.ticketCount} / " +
+                                    stringResource(
+                                        R.string.fare_summary,
+                                        fare.fareName,
+                                        fare.ticketCount,
                                         formatEuroCents(fare.cashTotalCents)
+                                    )
                                 )
                             }
                             if (shift.tickets.isNotEmpty()) {
                                 Spacer(modifier = Modifier.height(8.dp))
-                                Text("Ticket records", fontWeight = FontWeight.Bold)
+                                Text(stringResource(R.string.ticket_records), fontWeight = FontWeight.Bold)
                                 shift.tickets.forEach { ticket ->
                                     Text(
-                                        "${ticket.ticketId.takeLast(8)} • ${ticket.fareName} • " +
-                                            formatEuroCents(ticket.priceCents) +
-                                            if (ticket.synced) " • synced" else " • pending"
+                                        stringResource(
+                                            R.string.ticket_record,
+                                            ticket.ticketId.takeLast(8),
+                                            ticket.fareName,
+                                            formatEuroCents(ticket.priceCents),
+                                            stringResource(
+                                                if (ticket.synced) R.string.synced else R.string.pending
+                                            )
+                                        )
                                     )
                                 }
                             }
@@ -887,14 +1089,14 @@ private fun AdminReportScreen(
 
             Spacer(modifier = Modifier.height(24.dp))
             Button(onClick = onRefresh, modifier = Modifier.fillMaxWidth()) {
-                Text("Refresh Report")
+                Text(stringResource(R.string.refresh_report))
             }
             Spacer(modifier = Modifier.height(8.dp))
             OutlinedButton(
                 onClick = onBackToDriverConsole,
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Text(backLabel)
+                Text(stringResource(backLabel))
             }
         }
     }
@@ -920,34 +1122,42 @@ private fun PassengerDisplay(
         ) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Text(
-                    text = route?.name ?: "Active route",
+                    text = route?.name ?: stringResource(R.string.active_route),
                     style = MaterialTheme.typography.headlineSmall,
                     textAlign = TextAlign.Center
                 )
                 Spacer(modifier = Modifier.height(40.dp))
-                Text(text = "CURRENT STOP", fontWeight = FontWeight.Bold)
+                Text(text = stringResource(R.string.current_stop), fontWeight = FontWeight.Bold)
                 Text(
-                    text = status.currentStop?.name ?: "Unknown stop",
+                    text = status.currentStop?.name ?: stringResource(R.string.unknown_stop),
                     fontSize = 34.sp,
                     fontWeight = FontWeight.Bold,
                     textAlign = TextAlign.Center
                 )
                 Spacer(modifier = Modifier.height(40.dp))
                 Text(
-                    text = if (status.isRouteComplete) "ROUTE COMPLETE" else "NEXT STOP",
+                    text = stringResource(
+                        if (status.isRouteComplete) R.string.route_complete else R.string.next_stop
+                    ),
                     fontWeight = FontWeight.Bold
                 )
                 Text(
-                    text = status.nextStop?.name ?: "Final destination",
+                    text = status.nextStop?.name ?: stringResource(R.string.final_destination),
                     fontSize = 26.sp,
                     textAlign = TextAlign.Center
                 )
                 Spacer(modifier = Modifier.height(24.dp))
                 val currentNumber = (progress?.currentStopIndex ?: 0) + 1
-                Text(text = "Stop $currentNumber of ${route?.stops?.size ?: 0}")
+                Text(
+                    text = stringResource(
+                        R.string.stop_progress,
+                        currentNumber,
+                        route?.stops?.size ?: 0
+                    )
+                )
                 if (!state.isShiftActive) {
                     Spacer(modifier = Modifier.height(16.dp))
-                    Text(text = "SHIFT ENDED", fontWeight = FontWeight.Bold)
+                    Text(text = stringResource(R.string.shift_ended), fontWeight = FontWeight.Bold)
                 }
                 state.requestedStop?.let { requestedStop ->
                     Spacer(modifier = Modifier.height(28.dp))
@@ -959,7 +1169,7 @@ private fun PassengerDisplay(
                             horizontalAlignment = Alignment.CenterHorizontally
                         ) {
                             Text(
-                                text = "STOP REQUESTED",
+                                text = stringResource(R.string.stop_requested),
                                 fontSize = 22.sp,
                                 fontWeight = FontWeight.Bold
                             )
@@ -985,12 +1195,12 @@ private fun PassengerDisplay(
                         onClick = onDemoStopRequest,
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        Text("Request Stop (Demo)")
+                        Text(stringResource(R.string.request_stop_demo))
                     }
                     Spacer(modifier = Modifier.height(12.dp))
                 }
                 OutlinedButton(onClick = onBackToDriverConsole) {
-                    Text("Back to Driver Console")
+                    Text(stringResource(R.string.back_driver_console))
                 }
             }
         }
@@ -1050,11 +1260,52 @@ private fun formatReportDateTime(timestampMillis: Long): String {
         .format(Date(timestampMillis))
 }
 
+@Composable
 private fun formatDuration(durationMillis: Long): String {
     val totalMinutes = durationMillis / 60_000L
     val hours = totalMinutes / 60L
     val minutes = totalMinutes % 60L
-    return if (hours > 0) "${hours}h ${minutes}m" else "${minutes}m"
+    return if (hours > 0) {
+        stringResource(R.string.duration_hours_minutes, hours, minutes)
+    } else {
+        stringResource(R.string.duration_minutes, minutes)
+    }
+}
+
+@Composable
+private fun localizedDriverShiftStatus(state: DriverShiftUiState): String {
+    val resource = when (driverShiftStatus(state)) {
+        DriverShiftStatus.ACTIVE -> R.string.shift_status_active
+        DriverShiftStatus.READY_TO_START -> R.string.shift_status_ready
+        DriverShiftStatus.SIGN_IN_REQUIRED -> R.string.shift_status_sign_in
+    }
+    return stringResource(resource)
+}
+
+@Composable
+private fun localizedDriverSyncStatus(state: DriverShiftUiState): String {
+    return when (val status = driverSyncStatus(state)) {
+        DriverSyncStatus.Synchronizing -> stringResource(R.string.sync_status_synchronizing)
+        is DriverSyncStatus.Waiting -> pluralStringResource(
+            R.plurals.sync_status_waiting,
+            status.closedShiftCount,
+            status.closedShiftCount
+        )
+        DriverSyncStatus.DemoReady -> stringResource(R.string.sync_status_demo_ready)
+        DriverSyncStatus.LocalSynchronized -> stringResource(R.string.sync_status_local_complete)
+        DriverSyncStatus.ProductionSynchronized -> stringResource(R.string.sync_status_complete)
+    }
+}
+
+@Composable
+private fun localizedReportingSyncStatus(status: ReportingSyncStatus): String {
+    return stringResource(
+        when (status) {
+            ReportingSyncStatus.SYNCED -> R.string.report_sync_synced
+            ReportingSyncStatus.PARTIALLY_SYNCED -> R.string.report_sync_partial
+            ReportingSyncStatus.PENDING -> R.string.report_sync_pending
+        }
+    )
 }
 
 private fun hasBluetoothPrinterPermission(context: Context): Boolean {
@@ -1086,7 +1337,8 @@ private fun printerDisplayName(printer: PrinterDevice): String {
 private fun openTicketPdf(context: Context, path: String) {
     val file = File(path)
     if (!file.exists()) {
-        Toast.makeText(context, "The ticket PDF no longer exists", Toast.LENGTH_LONG).show()
+        Toast.makeText(context, context.getString(R.string.ticket_pdf_missing), Toast.LENGTH_LONG)
+            .show()
         return
     }
 
@@ -1105,10 +1357,11 @@ private fun openTicketPdf(context: Context, path: String) {
     } catch (_: ActivityNotFoundException) {
         Toast.makeText(
             context,
-            "Install a PDF viewer to open the ticket",
+            context.getString(R.string.install_pdf_viewer),
             Toast.LENGTH_LONG
         ).show()
     }
 }
 
 private const val BLUETOOTH_CONNECT_PERMISSION = "android.permission.BLUETOOTH_CONNECT"
+private const val LANGUAGE_MENU_DISMISS_DELAY_MILLIS = 200L

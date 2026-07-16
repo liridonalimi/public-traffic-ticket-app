@@ -7,6 +7,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.buspay.app.R
 import com.buspay.app.data.DemoTransitData
 import com.buspay.app.data.DemoTransitSyncClient
 import com.buspay.app.data.OfflineFirstRepository
@@ -119,6 +120,8 @@ class DriverShiftViewModel(application: Application) : AndroidViewModel(applicat
     private val pdfTicketPrinter = PdfTicketPrinter(application.applicationContext)
     private val gpsTracker = AndroidGpsTracker(application.applicationContext)
     private val stopRequestInput = DemoStopRequestInput()
+    private val demoRoutes = DemoTransitData.routes(application)
+    private val demoFareTypes = DemoTransitData.fareTypes(application)
     private val isDebuggable = application.applicationInfo.flags and
         ApplicationInfo.FLAG_DEBUGGABLE != 0
     private var syncRuntimeConfig = SyncRuntimeConfig.demo()
@@ -178,15 +181,15 @@ class DriverShiftViewModel(application: Application) : AndroidViewModel(applicat
 
         val selectedPrinter = uiState.selectedPrinter?.let { selected ->
             printers.firstOrNull { it.address == selected.address } ?: selected
-        } ?: PdfTicketPrinter.TEST_DEVICE
+        } ?: pdfTicketPrinter.pairedPrinters().first()
         uiState = uiState.copy(
             pairedPrinters = printers,
             selectedPrinter = selectedPrinter,
             printerMessage = when {
                 bluetoothPermissionMissing ->
-                    "PDF testing is available. Allow Bluetooth to find physical printers."
+                    text(R.string.vm_pdf_bluetooth_permission)
                 bluetoothPrinters.isEmpty() ->
-                    "PDF testing is available. No paired Bluetooth printers were found."
+                    text(R.string.vm_pdf_no_printers)
                 else -> null
             }
         )
@@ -221,7 +224,7 @@ class DriverShiftViewModel(application: Application) : AndroidViewModel(applicat
             activeShift = shift,
             routeProgress = initialProgress,
             isGpsTracking = false,
-            gpsMessage = "Allow location to update stops automatically, or use demo advance.",
+            gpsMessage = text(R.string.vm_allow_location),
             activeStopRequest = null,
             stopRequestMessage = null,
             tickets = emptyList(),
@@ -251,9 +254,9 @@ class DriverShiftViewModel(application: Application) : AndroidViewModel(applicat
         uiState = uiState.copy(
             isGpsTracking = started,
             gpsMessage = if (started) {
-                "GPS tracking is active"
+                text(R.string.vm_gps_active)
             } else {
-                "GPS is unavailable. Check location permission and device location settings."
+                text(R.string.vm_gps_unavailable)
             }
         )
     }
@@ -263,7 +266,7 @@ class DriverShiftViewModel(application: Application) : AndroidViewModel(applicat
         if (uiState.isGpsTracking) {
             uiState = uiState.copy(
                 isGpsTracking = false,
-                gpsMessage = if (uiState.isShiftActive) "GPS tracking is paused" else null
+                gpsMessage = if (uiState.isShiftActive) text(R.string.vm_gps_paused) else null
             )
         }
     }
@@ -280,7 +283,7 @@ class DriverShiftViewModel(application: Application) : AndroidViewModel(applicat
                 updatedAtMillis = System.currentTimeMillis(),
                 source = RouteProgressSource.MANUAL
             ),
-            "Stop advanced in demo mode"
+            text(R.string.vm_stop_advanced)
         )
     }
 
@@ -295,9 +298,9 @@ class DriverShiftViewModel(application: Application) : AndroidViewModel(applicat
         uiState = uiState.copy(
             isDemoServerAvailable = demoClient.isAvailable,
             syncMessage = if (demoClient.isAvailable) {
-                "Demo server is online"
+                text(R.string.vm_demo_online)
             } else {
-                "Demo server is offline"
+                text(R.string.vm_demo_offline)
             }
         )
     }
@@ -329,7 +332,7 @@ class DriverShiftViewModel(application: Application) : AndroidViewModel(applicat
             val candidate = if (endpoint.startsWith("https://", ignoreCase = true)) {
                 SyncRuntimeConfig.production(endpoint, token)
             } else {
-                check(isDebuggable) { "Loopback HTTP is available only in a debug build" }
+                check(isDebuggable) { text(R.string.vm_loopback_debug_only) }
                 SyncRuntimeConfig.localValidation(endpoint, token)
             }
             createTransitSyncClient(candidate)
@@ -337,8 +340,10 @@ class DriverShiftViewModel(application: Application) : AndroidViewModel(applicat
         }.getOrElse { failure ->
             uiState = uiState.copy(
                 syncTokenDraft = "",
-                syncMessage = "Server configuration rejected: " +
-                    (failure.message ?: "invalid endpoint or token")
+                syncMessage = text(
+                    R.string.vm_config_rejected,
+                    failure.message ?: text(R.string.vm_invalid_endpoint)
+                )
             )
             return
         }
@@ -353,9 +358,9 @@ class DriverShiftViewModel(application: Application) : AndroidViewModel(applicat
             isSyncConfigurationOpen = false,
             syncTokenDraft = "",
             syncMessage = if (config.mode == SyncRuntimeMode.LOCAL_VALIDATION) {
-                "Local validation server configured. Close a shift, then press Sync Now."
+                text(R.string.vm_local_server_configured)
             } else {
-                "Production HTTPS server configured for this app session."
+                text(R.string.vm_production_server_configured)
             }
         )
     }
@@ -371,7 +376,7 @@ class DriverShiftViewModel(application: Application) : AndroidViewModel(applicat
             isDemoServerAvailable = demoSyncClient?.isAvailable == true,
             isSyncConfigurationOpen = false,
             syncTokenDraft = "",
-            syncMessage = "Demo validation mode restored"
+            syncMessage = text(R.string.vm_demo_restored)
         )
     }
 
@@ -382,9 +387,9 @@ class DriverShiftViewModel(application: Application) : AndroidViewModel(applicat
         if (shifts.isEmpty() && tickets.isEmpty()) {
             uiState = uiState.copy(
                 syncMessage = if (uiState.isShiftActive && uiState.pendingTicketCount > 0) {
-                    "Active-shift tickets will be available after the shift ends"
+                    text(R.string.vm_active_tickets_wait)
                 } else {
-                    "No data is waiting for sync"
+                    text(R.string.vm_no_sync_data)
                 }
             )
             return
@@ -393,7 +398,7 @@ class DriverShiftViewModel(application: Application) : AndroidViewModel(applicat
         val batch = createSyncBatch(shifts, tickets)
         uiState = uiState.copy(
             isSyncing = true,
-            syncMessage = "Sending ${shifts.size} shift(s) and ${tickets.size} ticket(s)…"
+            syncMessage = text(R.string.vm_sending_sync, shifts.size, tickets.size)
         )
         viewModelScope.launch {
             when (val result = syncClient.sync(batch)) {
@@ -403,14 +408,16 @@ class DriverShiftViewModel(application: Application) : AndroidViewModel(applicat
                         ticketIds = result.acknowledgement.acknowledgedTicketIds
                     )
                     refreshSyncState(
-                        message = "Sync complete: " +
-                            "${result.acknowledgement.acknowledgedShiftIds.size} shift(s), " +
-                            "${result.acknowledgement.acknowledgedTicketIds.size} ticket(s)"
+                        message = text(
+                            R.string.vm_sync_complete,
+                            result.acknowledgement.acknowledgedShiftIds.size,
+                            result.acknowledgement.acknowledgedTicketIds.size
+                        )
                     )
                 }
 
                 is SyncResult.Failure -> {
-                    refreshSyncState(message = "Sync failed: ${result.message}")
+                    refreshSyncState(message = text(R.string.vm_sync_failed, result.message))
                 }
             }
         }
@@ -425,7 +432,7 @@ class DriverShiftViewModel(application: Application) : AndroidViewModel(applicat
         val fareType = uiState.selectedFareType ?: return
         if (uiState.isPrinting) return
         if (uiState.selectedPrinter == null) {
-            uiState = uiState.copy(printerMessage = "Select a printer before selling")
+            uiState = uiState.copy(printerMessage = text(R.string.vm_select_printer_selling))
             return
         }
         val ticket = Ticket(
@@ -479,7 +486,7 @@ class DriverShiftViewModel(application: Application) : AndroidViewModel(applicat
             pendingTicketCount = repository.pendingTicketCount(),
             pendingShiftCount = repository.pendingShiftCount(),
             syncableTicketCount = repository.pendingTicketsForSync(activeShiftId = null).size,
-            syncMessage = "Shift closed: ${uiState.ticketCount} ticket(s) ready for sync",
+            syncMessage = text(R.string.vm_shift_closed, uiState.ticketCount),
             adminReport = createAdminReport(activeShiftId = null),
             lastClosedSummary = DriverShiftSummary(
                 ticketCount = uiState.ticketCount,
@@ -521,13 +528,13 @@ class DriverShiftViewModel(application: Application) : AndroidViewModel(applicat
             selectedDriver = restoredDriver ?: DemoTransitData.drivers.first(),
             signedInDriver = restoredDriver,
             buses = DemoTransitData.buses,
-            routes = DemoTransitData.routes,
+            routes = demoRoutes,
             selectedBus = restoredShift?.let { shift ->
                 DemoTransitData.buses.firstOrNull { it.id == shift.busId }
             } ?: DemoTransitData.buses.first(),
             selectedRoute = restoredShift?.let { shift ->
-                DemoTransitData.routes.firstOrNull { it.id == shift.routeId }
-            } ?: DemoTransitData.routes.first(),
+                demoRoutes.firstOrNull { it.id == shift.routeId }
+            } ?: demoRoutes.first(),
             activeShift = restoredShift,
             routeProgress = restoredProgress ?: restoredShift?.let { shift ->
                 RouteProgress(
@@ -537,13 +544,15 @@ class DriverShiftViewModel(application: Application) : AndroidViewModel(applicat
                     source = RouteProgressSource.SHIFT_START
                 )
             },
-            gpsMessage = restoredShift?.let { "Allow location to resume automatic stop tracking." },
+            gpsMessage = restoredShift?.let { text(R.string.vm_resume_location) },
             activeStopRequest = restoredStopRequest,
-            stopRequestMessage = restoredStopRequest?.let { "Stop request restored" },
-            fareTypes = DemoTransitData.fareTypes,
-            selectedFareType = DemoTransitData.fareTypes.first(),
+            stopRequestMessage = restoredStopRequest?.let {
+                text(R.string.vm_stop_request_restored)
+            },
+            fareTypes = demoFareTypes,
+            selectedFareType = demoFareTypes.first(),
             pairedPrinters = pdfTicketPrinter.pairedPrinters(),
-            selectedPrinter = repository.loadPrinter() ?: PdfTicketPrinter.TEST_DEVICE,
+            selectedPrinter = repository.loadPrinter() ?: pdfTicketPrinter.pairedPrinters().first(),
             tickets = restoredTickets,
             pendingTicketCount = repository.pendingTicketCount(),
             pendingShiftCount = repository.pendingShiftCount(),
@@ -574,7 +583,7 @@ class DriverShiftViewModel(application: Application) : AndroidViewModel(applicat
                 updatedAtMillis = location.capturedAtMillis,
                 source = RouteProgressSource.GPS
             ),
-            "GPS updated the current stop"
+            text(R.string.vm_gps_updated_stop)
         )
     }
 
@@ -583,13 +592,13 @@ class DriverShiftViewModel(application: Application) : AndroidViewModel(applicat
         val route = uiState.selectedRoute ?: return
         val progress = uiState.routeProgress ?: return
         if (uiState.activeStopRequest != null) {
-            uiState = uiState.copy(stopRequestMessage = "A stop request is already active")
+            uiState = uiState.copy(stopRequestMessage = text(R.string.vm_stop_request_active))
             return
         }
         val requestedStopIndex = progress.currentStopIndex + 1
         val requestedStop = route.stops.getOrNull(requestedStopIndex)
         if (requestedStop == null) {
-            uiState = uiState.copy(stopRequestMessage = "No next stop is available")
+            uiState = uiState.copy(stopRequestMessage = text(R.string.vm_no_next_stop))
             return
         }
 
@@ -601,7 +610,7 @@ class DriverShiftViewModel(application: Application) : AndroidViewModel(applicat
         repository.saveStopRequest(request)
         uiState = uiState.copy(
             activeStopRequest = request,
-            stopRequestMessage = "Stop requested: ${requestedStop.name}"
+            stopRequestMessage = text(R.string.vm_stop_requested, requestedStop.name)
         )
     }
 
@@ -625,7 +634,10 @@ class DriverShiftViewModel(application: Application) : AndroidViewModel(applicat
             gpsMessage = message,
             activeStopRequest = if (requestReached) null else activeRequest,
             stopRequestMessage = if (requestReached) {
-                "Stop request cleared at ${requestedStopName ?: "requested stop"}"
+                text(
+                    R.string.vm_stop_request_cleared,
+                    requestedStopName ?: text(R.string.vm_requested_stop)
+                )
             } else {
                 uiState.stopRequestMessage
             }
@@ -656,8 +668,8 @@ class DriverShiftViewModel(application: Application) : AndroidViewModel(applicat
             tickets = reportingTickets,
             drivers = DemoTransitData.drivers,
             buses = DemoTransitData.buses,
-            routes = DemoTransitData.routes,
-            fareTypes = DemoTransitData.fareTypes,
+            routes = demoRoutes,
+            fareTypes = demoFareTypes,
             filter = filter
         )
     }
@@ -671,26 +683,26 @@ class DriverShiftViewModel(application: Application) : AndroidViewModel(applicat
     private fun printTicket(ticket: Ticket) {
         val printer = uiState.selectedPrinter
         if (printer == null) {
-            markPrintFailed(ticket, "Select a printer before printing")
+            markPrintFailed(ticket, text(R.string.vm_select_printer_printing))
             return
         }
 
         val fareName = uiState.fareTypes
             .firstOrNull { it.id == ticket.fareTypeId }
             ?.name
-            ?: "Unknown fare"
+            ?: text(R.string.vm_unknown_fare)
         val printableTicket = PrintableTicket(
             ticketCode = ticket.id.removePrefix("ticket-").take(8).uppercase(),
-            busPlateNumber = uiState.selectedBus?.plateNumber ?: "Unknown bus",
-            routeName = uiState.selectedRoute?.name ?: "Unknown route",
+            busPlateNumber = uiState.selectedBus?.plateNumber ?: text(R.string.vm_unknown_bus),
+            routeName = uiState.selectedRoute?.name ?: text(R.string.vm_unknown_route),
             fareName = fareName,
             priceCents = ticket.priceCents,
             soldAtText = DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT)
                 .format(Date(ticket.soldAtMillis)),
-            operatorName = uiState.signedInDriver?.name ?: "Unknown operator"
+            operatorName = uiState.signedInDriver?.name ?: text(R.string.vm_unknown_operator)
         )
 
-        uiState = uiState.copy(isPrinting = true, printerMessage = "Printing ticket…")
+        uiState = uiState.copy(isPrinting = true, printerMessage = text(R.string.vm_printing_ticket))
         viewModelScope.launch {
             val selectedTicketPrinter = if (printer.address == PdfTicketPrinter.TEST_DEVICE.address) {
                 pdfTicketPrinter
@@ -709,9 +721,9 @@ class DriverShiftViewModel(application: Application) : AndroidViewModel(applicat
                         ticket = printedTicket,
                         isPrinting = false,
                         printerMessage = if (result.outputPath != null) {
-                            "Ticket PDF created successfully"
+                            text(R.string.vm_pdf_created)
                         } else {
-                            "Ticket printed successfully"
+                            text(R.string.vm_ticket_printed)
                         },
                         lastPdfPath = result.outputPath ?: uiState.lastPdfPath
                     )
@@ -734,7 +746,7 @@ class DriverShiftViewModel(application: Application) : AndroidViewModel(applicat
         replaceTicket(
             ticket = failedTicket,
             isPrinting = false,
-            printerMessage = "Print failed: $message"
+            printerMessage = text(R.string.vm_print_failed, message)
         )
     }
 
@@ -752,6 +764,10 @@ class DriverShiftViewModel(application: Application) : AndroidViewModel(applicat
             printerMessage = printerMessage,
             lastPdfPath = lastPdfPath
         )
+    }
+
+    private fun text(resourceId: Int, vararg arguments: Any): String {
+        return getApplication<Application>().getString(resourceId, *arguments)
     }
 
 }

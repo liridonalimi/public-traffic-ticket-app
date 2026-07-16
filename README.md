@@ -41,6 +41,8 @@ It currently includes:
 - authenticated, non-mutating staging smoke validation with negative-token verification
 - driver-first pilot workspace with explicit shift status and end-shift confirmation
 - separate between-shift operations workspace for sync setup and administrative tools
+- Android language selector with system default, Albanian, and English choices
+- Kosovo-oriented pilot terminology for lines, stops, fares, shifts, and cash sales
 - cash ticket count and cash total during an active shift
 - persistent local active shift storage
 - persistent local ticket storage for future sync
@@ -67,7 +69,8 @@ It currently includes:
 14. Authenticated administrative web reporting dashboard - complete
 15. Android-to-server live synchronization activation - complete
 16. Staging release readiness and operational validation - complete
-17. Driver pilot UX and role separation - ready for double-test
+17. Driver pilot UX and role separation - complete
+18. Albanian-first localization and Kosovo operator terminology - complete
 
 ## Documentation
 
@@ -90,6 +93,7 @@ Presentation documentation:
 - English: `docs/EN/15-android-to-server-live-sync.md`
 - English: `docs/EN/16-staging-release-readiness.md`
 - English: `docs/EN/17-driver-pilot-ux-and-role-separation.md`
+- English: `docs/EN/18-albanian-first-localization.md`
 - Albanian: `docs/SQ/01-themeli-i-projektit-dhe-skeleti-android.md`
 - Albanian: `docs/SQ/02-rrjedha-e-turnit-te-shoferit.md`
 - Albanian: `docs/SQ/03-ruajtja-lokale-e-biletave.md`
@@ -107,6 +111,7 @@ Presentation documentation:
 - Albanian: `docs/SQ/15-sinkronizimi-live-android-me-serverin.md`
 - Albanian: `docs/SQ/16-gatishmeria-e-publikimit-staging.md`
 - Albanian: `docs/SQ/17-pervoja-e-pilotit-per-shoferin-dhe-ndarja-e-roleve.md`
+- Albanian: `docs/SQ/18-lokalizimi-me-shqipen-si-gjuhe-kryesore.md`
 
 Technical documentation:
 
@@ -127,15 +132,15 @@ Technical documentation:
 - `docs/TECHNICAL/15-android-to-server-live-sync.md`
 - `docs/TECHNICAL/16-staging-release-readiness.md`
 - `docs/TECHNICAL/17-driver-pilot-ux-and-role-separation.md`
+- `docs/TECHNICAL/18-albanian-first-localization.md`
 
 ## Next build milestone
 
 Client-readiness continues with:
 
-1. Module 18: Albanian-first localization and Kosovo operator terminology.
-2. Module 19: printer simulation, receipt quality, and a hardware certification checklist.
-3. Module 20: centrally managed drivers, buses, routes, stops, and fares.
-4. Select hosting infrastructure and activate the already prepared staging release gate when a domain and accountable operator are available.
+1. Module 19: printer simulation, receipt quality, and a hardware certification checklist.
+2. Module 20: centrally managed drivers, buses, routes, stops, and fares.
+3. Select hosting infrastructure and activate the already prepared staging release gate when a domain and accountable operator are available.
 
 #######################################
 
@@ -182,6 +187,8 @@ Aktualisht përfshin:
 - kontrollin e autentikuar dhe pa ndryshim të të dhënave pas publikimit, përfshirë token-in e gabuar
 - hapësirën e fokusuar për shoferin me status të qartë dhe konfirmim për përfundimin e turnit
 - hapësirën e veçantë ndërmjet turneve për konfigurimin e sinkronizimit dhe mjetet administrative
+- zgjedhësin e gjuhës Android me opsionet e pajisjes, shqip dhe anglisht
+- terminologjinë e pilotit për Kosovën për linjat, ndalesat, tarifat, turnet dhe shitjet me para të gatshme
 - numërimin e biletave me para të gatshme dhe totalin e arkës gjatë turnit aktiv
 - ruajtjen lokale të turnit aktiv
 - ruajtjen lokale të biletave për sinkronizim të ardhshëm
@@ -208,13 +215,13 @@ Aktualisht përfshin:
 14. Paneli web administrativ i autentikuar për raportim - përfunduar
 15. Aktivizimi i sinkronizimit live Android-server - përfunduar
 16. Gatishmëria e publikimit staging dhe validimi operacional - përfunduar
-17. Përvoja e pilotit për shoferin dhe ndarja e roleve - gati për testim të dyfishtë
+17. Përvoja e pilotit për shoferin dhe ndarja e roleve - përfunduar
+18. Lokalizimi me shqipen si gjuhë kryesore dhe terminologjia e operatorit në Kosovë - përfunduar
 
 ## Pika e ndërtimit tjetër
 
 Gatishmëria për klientin vazhdon me:
 
-1. Moduli 18: lokalizimi me shqipen si gjuhë kryesore dhe terminologjia e operatorit në Kosovë.
-2. Moduli 19: simulimi i printerit, cilësia e kuponit dhe lista e certifikimit të pajisjes.
-3. Moduli 20: menaxhimi qendror i shoferëve, autobusëve, linjave, ndalesave dhe tarifave.
-4. Zgjidhni infrastrukturën dhe aktivizoni kontrollin staging tashmë të përgatitur kur të ketë domain dhe operator përgjegjës.
+1. Moduli 19: simulimi i printerit, cilësia e kuponit dhe lista e certifikimit të pajisjes.
+2. Moduli 20: menaxhimi qendror i shoferëve, autobusëve, linjave, ndalesave dhe tarifave.
+3. Zgjidhni infrastrukturën dhe aktivizoni kontrollin staging tashmë të përgatitur kur të ketë domain dhe operator përgjegjës.

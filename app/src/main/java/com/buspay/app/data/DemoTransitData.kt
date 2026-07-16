@@ -1,5 +1,7 @@
 package com.buspay.app.data
 
+import android.content.Context
+import com.buspay.app.R
 import com.buspay.app.domain.Bus
 import com.buspay.app.domain.Driver
 import com.buspay.app.domain.FareType
@@ -20,49 +22,49 @@ object DemoTransitData {
         Bus(id = "bus-318", plateNumber = "01-318-KS")
     )
 
-    val fareTypes = listOf(
+    fun fareTypes(context: Context) = listOf(
         FareType(
             id = Ticket.STANDARD_FARE_TYPE_ID,
-            name = "Standard",
+            name = context.getString(R.string.fare_standard),
             priceCents = 50
         ),
         FareType(
             id = "student",
-            name = "Student",
+            name = context.getString(R.string.fare_student),
             priceCents = 30,
-            eligibility = "Valid student ID required"
+            eligibility = context.getString(R.string.fare_student_eligibility)
         ),
         FareType(
             id = "senior",
-            name = "Senior 65+",
+            name = context.getString(R.string.fare_senior),
             priceCents = 25,
-            eligibility = "For passengers aged 65 or older"
+            eligibility = context.getString(R.string.fare_senior_eligibility)
         ),
         FareType(
             id = "child",
-            name = "Child",
+            name = context.getString(R.string.fare_child),
             priceCents = 20,
-            eligibility = "For children aged 6 to 12"
+            eligibility = context.getString(R.string.fare_child_eligibility)
         )
     )
 
-    val routes = listOf(
+    fun routes(context: Context) = listOf(
         Route(
             id = "route-1",
-            name = "Line 1 - Center to Hospital",
+            name = context.getString(R.string.route_one_name),
             stops = listOf(
-                Stop("stop-1", "Central Station", 42.6629, 21.1655, 1),
-                Stop("stop-2", "Mother Teresa Boulevard", 42.6608, 21.1622, 2),
-                Stop("stop-3", "University Hospital", 42.6488, 21.1612, 3)
+                Stop("stop-1", context.getString(R.string.stop_central_station), 42.6629, 21.1655, 1),
+                Stop("stop-2", context.getString(R.string.stop_mother_teresa), 42.6608, 21.1622, 2),
+                Stop("stop-3", context.getString(R.string.stop_university_hospital), 42.6488, 21.1612, 3)
             )
         ),
         Route(
             id = "route-2",
-            name = "Line 2 - Center to Sunny Hill",
+            name = context.getString(R.string.route_two_name),
             stops = listOf(
-                Stop("stop-4", "Central Station", 42.6629, 21.1655, 1),
-                Stop("stop-5", "City Park", 42.6551, 21.1713, 2),
-                Stop("stop-6", "Sunny Hill", 42.6468, 21.1781, 3)
+                Stop("stop-4", context.getString(R.string.stop_central_station), 42.6629, 21.1655, 1),
+                Stop("stop-5", context.getString(R.string.stop_city_park), 42.6551, 21.1713, 2),
+                Stop("stop-6", context.getString(R.string.stop_sunny_hill), 42.6468, 21.1781, 3)
             )
         )
     )

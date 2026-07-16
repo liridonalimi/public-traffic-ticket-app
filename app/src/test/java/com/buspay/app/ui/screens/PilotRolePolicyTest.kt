@@ -23,7 +23,7 @@ class PilotRolePolicyTest {
         )
 
         assertFalse(canOpenOperationsTools(state))
-        assertEquals("SHIFT ACTIVE", driverShiftStatus(state))
+        assertEquals(DriverShiftStatus.ACTIVE, driverShiftStatus(state))
     }
 
     @Test
@@ -33,7 +33,7 @@ class PilotRolePolicyTest {
         )
 
         assertTrue(canOpenOperationsTools(state))
-        assertEquals("READY TO START", driverShiftStatus(state))
+        assertEquals(DriverShiftStatus.READY_TO_START, driverShiftStatus(state))
     }
 
     @Test
@@ -46,13 +46,7 @@ class PilotRolePolicyTest {
             syncRuntimeMode = SyncRuntimeMode.LOCAL_VALIDATION
         )
 
-        assertEquals(
-            "2 closed shift(s) waiting for synchronization",
-            driverSyncSummary(waiting)
-        )
-        assertEquals(
-            "All closed shifts are synchronized with the local server",
-            driverSyncSummary(synchronized)
-        )
+        assertEquals(DriverSyncStatus.Waiting(2), driverSyncStatus(waiting))
+        assertEquals(DriverSyncStatus.LocalSynchronized, driverSyncStatus(synchronized))
     }
 }
