@@ -39,6 +39,8 @@ It currently includes:
 - provider-neutral staging Compose profile with private ingress-only exposure
 - fail-closed staging preflight for HTTPS, immutable images, protected secrets, retention, and named owners
 - authenticated, non-mutating staging smoke validation with negative-token verification
+- driver-first pilot workspace with explicit shift status and end-shift confirmation
+- separate between-shift operations workspace for sync setup and administrative tools
 - cash ticket count and cash total during an active shift
 - persistent local active shift storage
 - persistent local ticket storage for future sync
@@ -64,7 +66,8 @@ It currently includes:
 13. Production deployment package and runtime activation boundary - complete
 14. Authenticated administrative web reporting dashboard - complete
 15. Android-to-server live synchronization activation - complete
-16. Staging release readiness and operational validation - ready for double-test
+16. Staging release readiness and operational validation - complete
+17. Driver pilot UX and role separation - ready for double-test
 
 ## Documentation
 
@@ -86,6 +89,7 @@ Presentation documentation:
 - English: `docs/EN/14-admin-web-reporting-dashboard.md`
 - English: `docs/EN/15-android-to-server-live-sync.md`
 - English: `docs/EN/16-staging-release-readiness.md`
+- English: `docs/EN/17-driver-pilot-ux-and-role-separation.md`
 - Albanian: `docs/SQ/01-themeli-i-projektit-dhe-skeleti-android.md`
 - Albanian: `docs/SQ/02-rrjedha-e-turnit-te-shoferit.md`
 - Albanian: `docs/SQ/03-ruajtja-lokale-e-biletave.md`
@@ -102,6 +106,7 @@ Presentation documentation:
 - Albanian: `docs/SQ/14-paneli-web-i-raportimit-administrativ.md`
 - Albanian: `docs/SQ/15-sinkronizimi-live-android-me-serverin.md`
 - Albanian: `docs/SQ/16-gatishmeria-e-publikimit-staging.md`
+- Albanian: `docs/SQ/17-pervoja-e-pilotit-per-shoferin-dhe-ndarja-e-roleve.md`
 
 Technical documentation:
 
@@ -121,14 +126,16 @@ Technical documentation:
 - `docs/TECHNICAL/14-admin-web-reporting-dashboard.md`
 - `docs/TECHNICAL/15-android-to-server-live-sync.md`
 - `docs/TECHNICAL/16-staging-release-readiness.md`
+- `docs/TECHNICAL/17-driver-pilot-ux-and-role-separation.md`
 
 ## Next build milestone
 
-Production integration continues with:
+Client-readiness continues with:
 
-1. Select the infrastructure, registry, domain, TLS ingress, and accountable owners; then run the first hosted staging deployment with the Module 16 release gate.
-2. Replace the shared pilot token with role-based, short-lived administrative identity.
-3. Add privacy, audit, export, monitoring, pagination, and production governance controls.
+1. Module 18: Albanian-first localization and Kosovo operator terminology.
+2. Module 19: printer simulation, receipt quality, and a hardware certification checklist.
+3. Module 20: centrally managed drivers, buses, routes, stops, and fares.
+4. Select hosting infrastructure and activate the already prepared staging release gate when a domain and accountable operator are available.
 
 #######################################
 
@@ -173,6 +180,8 @@ Aktualisht përfshin:
 - profilin staging të pavarur nga ofruesi me ekspozim vetëm përmes ingress-it privat
 - kontrollin staging që dështon në mënyrë të sigurt për HTTPS, imazhin e pandryshueshëm, sekretet, ruajtjen dhe pronarët
 - kontrollin e autentikuar dhe pa ndryshim të të dhënave pas publikimit, përfshirë token-in e gabuar
+- hapësirën e fokusuar për shoferin me status të qartë dhe konfirmim për përfundimin e turnit
+- hapësirën e veçantë ndërmjet turneve për konfigurimin e sinkronizimit dhe mjetet administrative
 - numërimin e biletave me para të gatshme dhe totalin e arkës gjatë turnit aktiv
 - ruajtjen lokale të turnit aktiv
 - ruajtjen lokale të biletave për sinkronizim të ardhshëm
@@ -198,12 +207,14 @@ Aktualisht përfshin:
 13. Paketa e vendosjes dhe kufiri i aktivizimit në prodhim - përfunduar
 14. Paneli web administrativ i autentikuar për raportim - përfunduar
 15. Aktivizimi i sinkronizimit live Android-server - përfunduar
-16. Gatishmëria e publikimit staging dhe validimi operacional - gati për testim të dyfishtë
+16. Gatishmëria e publikimit staging dhe validimi operacional - përfunduar
+17. Përvoja e pilotit për shoferin dhe ndarja e roleve - gati për testim të dyfishtë
 
 ## Pika e ndërtimit tjetër
 
-Integrimi në prodhim vazhdon me:
+Gatishmëria për klientin vazhdon me:
 
-1. Zgjidhni infrastrukturën, regjistrin, domain-in, TLS ingress dhe pronarët përgjegjës; pastaj kryeni publikimin e parë staging me kontrollin e Modulit 16.
-2. Zëvendësoni token-in e përbashkët të pilotit me identitet administrativ jetëshkurtër dhe sipas roleve.
-3. Shtoni privatësinë, auditimin, eksportin, monitorimin, faqosjen dhe qeverisjen e prodhimit.
+1. Moduli 18: lokalizimi me shqipen si gjuhë kryesore dhe terminologjia e operatorit në Kosovë.
+2. Moduli 19: simulimi i printerit, cilësia e kuponit dhe lista e certifikimit të pajisjes.
+3. Moduli 20: menaxhimi qendror i shoferëve, autobusëve, linjave, ndalesave dhe tarifave.
+4. Zgjidhni infrastrukturën dhe aktivizoni kontrollin staging tashmë të përgatitur kur të ketë domain dhe operator përgjegjës.

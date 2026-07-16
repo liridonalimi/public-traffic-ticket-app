@@ -22,6 +22,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.MaterialTheme
@@ -29,6 +30,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -64,6 +66,8 @@ fun DriverHomeScreen(viewModel: DriverShiftViewModel = viewModel()) {
     val context = LocalContext.current
     var showPassengerDisplay by remember { mutableStateOf(false) }
     var showAdminReport by remember { mutableStateOf(false) }
+    var workspace by remember { mutableStateOf(PilotWorkspace.DRIVER) }
+    var showEndShiftConfirmation by remember { mutableStateOf(false) }
     var hasBluetoothPermission by remember {
         mutableStateOf(hasBluetoothPrinterPermission(context))
     }
@@ -97,11 +101,34 @@ fun DriverHomeScreen(viewModel: DriverShiftViewModel = viewModel()) {
     }
 
     MaterialTheme {
+        if (workspace == PilotWorkspace.OPERATIONS && canOpenOperationsTools(state)) {
+            if (showAdminReport) {
+                AdminReportScreen(
+                    report = state.adminReport,
+                    onRefresh = { viewModel.refreshAdminReport() },
+                    onBackToDriverConsole = { showAdminReport = false },
+                    backLabel = "Back to Operations Tools"
+                )
+            } else {
+                OperationsToolsScreen(
+                    state = state,
+                    viewModel = viewModel,
+                    onOpenAdminReport = {
+                        viewModel.refreshAdminReport()
+                        showAdminReport = true
+                    },
+                    onBackToDriverConsole = { workspace = PilotWorkspace.DRIVER }
+                )
+            }
+            return@MaterialTheme
+        }
+
         if (showAdminReport) {
             AdminReportScreen(
                 report = state.adminReport,
                 onRefresh = { viewModel.refreshAdminReport() },
-                onBackToDriverConsole = { showAdminReport = false }
+                onBackToDriverConsole = { showAdminReport = false },
+                backLabel = "Back to Driver Console"
             )
             return@MaterialTheme
         }
@@ -137,6 +164,37 @@ fun DriverHomeScreen(viewModel: DriverShiftViewModel = viewModel()) {
                         text = "BusPay native pilot",
                         style = MaterialTheme.typography.bodyLarge
                     )
+
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Card(modifier = Modifier.fillMaxWidth()) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(16.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = driverShiftStatus(state),
+                                    fontWeight = FontWeight.Bold
+                                )
+                                Text(
+                                    text = if (state.isShiftActive) {
+                                        "Stay on this screen while serving passengers"
+                                    } else {
+                                        "Confirm driver, bus, and route before departure"
+                                    },
+                                    style = MaterialTheme.typography.bodySmall
+                                )
+                            }
+                            Text(
+                                text = if (state.isShiftActive) "IN SERVICE" else "PILOT",
+                                color = MaterialTheme.colorScheme.primary,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
 
                     Spacer(modifier = Modifier.height(24.dp))
 
@@ -397,7 +455,7 @@ fun DriverHomeScreen(viewModel: DriverShiftViewModel = viewModel()) {
 
                     Spacer(modifier = Modifier.height(20.dp))
 
-                    Text(text = "Total waiting for sync", fontWeight = FontWeight.Bold)
+                    Text(text = "Synchronization", fontWeight = FontWeight.Bold)
                     Text(text = "${state.pendingShiftCount} closed shift(s)")
                     Text(text = "${state.pendingTicketCount} ticket(s) saved locally")
                     if (state.isShiftActive &&
@@ -409,137 +467,33 @@ fun DriverHomeScreen(viewModel: DriverShiftViewModel = viewModel()) {
                         )
                     }
                     Spacer(modifier = Modifier.height(8.dp))
-                    Card(modifier = Modifier.fillMaxWidth()) {
-                        Column(modifier = Modifier.padding(16.dp)) {
-                            Text(text = "Sync service", fontWeight = FontWeight.Bold)
-                            Text(
-                                text = when (state.syncRuntimeMode) {
-                                    SyncRuntimeMode.DEMO -> "Active mode: Demo validation"
-                                    SyncRuntimeMode.LOCAL_VALIDATION ->
-                                        "Active mode: Local server validation"
-                                    SyncRuntimeMode.PRODUCTION -> "Active mode: Production HTTPS"
-                                }
-                            )
-                            Text(text = "Production HTTPS contract v1: ready")
-                            Text(text = "Reference API/database: implemented • deployment pending")
-                            Text(text = "Deployment package: ready • infrastructure selection pending")
-                            Text(
-                                text = if (state.canUseLocalValidationServer) {
-                                    "Debug builds can use loopback HTTP through adb reverse. " +
-                                        "Production connections still require HTTPS."
-                                } else {
-                                    "Activation requires an HTTPS server URL and an " +
-                                        "authenticated access token."
-                                },
-                                style = MaterialTheme.typography.bodySmall
-                            )
-                        }
-                    }
-                    Spacer(modifier = Modifier.height(8.dp))
-                    OutlinedButton(
-                        onClick = viewModel::toggleSyncConfiguration,
-                        enabled = !state.isSyncing,
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Text(if (state.isSyncConfigurationOpen) "Cancel Server Setup" else "Configure Sync Server")
-                    }
-                    if (state.isSyncConfigurationOpen) {
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Card(modifier = Modifier.fillMaxWidth()) {
-                            Column(modifier = Modifier.padding(16.dp)) {
-                                Text(text = "Authenticated sync server", fontWeight = FontWeight.Bold)
-                                Spacer(modifier = Modifier.height(8.dp))
-                                OutlinedTextField(
-                                    value = state.syncEndpointDraft,
-                                    onValueChange = viewModel::updateSyncEndpointDraft,
-                                    label = { Text("Sync endpoint") },
-                                    placeholder = { Text("https://server.example/v1/sync") },
-                                    singleLine = true,
-                                    modifier = Modifier.fillMaxWidth()
-                                )
-                                Spacer(modifier = Modifier.height(8.dp))
-                                OutlinedTextField(
-                                    value = state.syncTokenDraft,
-                                    onValueChange = viewModel::updateSyncTokenDraft,
-                                    label = { Text("Access token") },
-                                    visualTransformation = PasswordVisualTransformation(),
-                                    singleLine = true,
-                                    modifier = Modifier.fillMaxWidth()
-                                )
-                                Spacer(modifier = Modifier.height(8.dp))
-                                Text(
-                                    text = "The token stays only in this running app session and " +
-                                        "is cleared from this field after activation.",
-                                    style = MaterialTheme.typography.bodySmall
-                                )
-                                Spacer(modifier = Modifier.height(8.dp))
-                                Button(
-                                    onClick = viewModel::activateConfiguredSyncServer,
-                                    enabled = state.syncEndpointDraft.isNotBlank() &&
-                                        state.syncTokenDraft.isNotBlank(),
-                                    modifier = Modifier.fillMaxWidth()
-                                ) {
-                                    Text("Activate Server")
-                                }
-                            }
-                        }
-                    }
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text(
-                        text = when (state.syncRuntimeMode) {
-                            SyncRuntimeMode.LOCAL_VALIDATION -> "Local validation server: configured"
-                            SyncRuntimeMode.PRODUCTION -> "Production service: configured"
-                            SyncRuntimeMode.DEMO -> if (state.isDemoServerAvailable) {
-                                "Demo server: online"
-                            } else {
-                                "Demo server: offline"
-                            }
-                        }
-                    )
+                    Text(text = driverSyncSummary(state))
                     state.syncMessage?.let { message ->
                         Text(text = message)
                     }
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
+                    if (!state.isShiftActive) {
+                        Spacer(modifier = Modifier.height(12.dp))
+                        if (state.pendingShiftCount > 0) {
+                            Button(
+                                onClick = viewModel::syncPendingData,
+                                enabled = !state.isSyncing,
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Text(if (state.isSyncing) "Synchronizing…" else "Sync Closed Shifts")
+                            }
+                            Spacer(modifier = Modifier.height(8.dp))
+                        }
                         OutlinedButton(
-                            onClick = if (state.isDemoSyncMode) {
-                                viewModel::toggleDemoServerAvailability
-                            } else {
-                                viewModel::useDemoSyncMode
-                            },
-                            enabled = !state.isSyncing,
-                            modifier = Modifier.weight(1f)
+                            onClick = { workspace = PilotWorkspace.OPERATIONS },
+                            enabled = canOpenOperationsTools(state),
+                            modifier = Modifier.fillMaxWidth()
                         ) {
-                            Text(
-                                if (!state.isDemoSyncMode) {
-                                    "Use Demo Mode"
-                                } else if (state.isDemoServerAvailable) {
-                                    "Go Offline"
-                                } else {
-                                    "Go Online"
-                                }
-                            )
+                            Text("Operations & Setup")
                         }
-                        Button(
-                            onClick = viewModel::syncPendingData,
-                            enabled = !state.isSyncing,
-                            modifier = Modifier.weight(1f)
-                        ) {
-                            Text(if (state.isSyncing) "Syncing…" else "Sync Now")
-                        }
-                    }
-                    Spacer(modifier = Modifier.height(8.dp))
-                    OutlinedButton(
-                        onClick = {
-                            viewModel.refreshAdminReport()
-                            showAdminReport = true
-                        },
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Text("Open Admin Report Preview")
+                        Text(
+                            text = "Supervisor tools are separated from the driver workflow.",
+                            style = MaterialTheme.typography.bodySmall
+                        )
                     }
 
                     state.lastClosedSummary?.let { summary ->
@@ -562,7 +516,7 @@ fun DriverHomeScreen(viewModel: DriverShiftViewModel = viewModel()) {
                 ) {
                     if (state.isShiftActive) {
                         OutlinedButton(
-                            onClick = viewModel::endShift,
+                            onClick = { showEndShiftConfirmation = true },
                             enabled = !state.isPrinting && state.unprintedTickets.isEmpty(),
                             modifier = Modifier.weight(1f)
                         ) {
@@ -592,6 +546,211 @@ fun DriverHomeScreen(viewModel: DriverShiftViewModel = viewModel()) {
                 }
             }
         }
+
+        if (showEndShiftConfirmation) {
+            AlertDialog(
+                onDismissRequest = { showEndShiftConfirmation = false },
+                title = { Text("End current shift?") },
+                text = {
+                    Text(
+                        "Ticket sales will close and this shift will become ready for synchronization."
+                    )
+                },
+                confirmButton = {
+                    Button(
+                        onClick = {
+                            showEndShiftConfirmation = false
+                            viewModel.endShift()
+                        }
+                    ) {
+                        Text("End Shift")
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showEndShiftConfirmation = false }) {
+                        Text("Keep Shift Open")
+                    }
+                }
+            )
+        }
+    }
+}
+
+@Composable
+private fun OperationsToolsScreen(
+    state: DriverShiftUiState,
+    viewModel: DriverShiftViewModel,
+    onOpenAdminReport: () -> Unit,
+    onBackToDriverConsole: () -> Unit
+) {
+    Surface(modifier = Modifier.fillMaxSize()) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+                .padding(24.dp)
+        ) {
+            Text(
+                text = "Operations & Setup",
+                fontSize = 28.sp,
+                fontWeight = FontWeight.Bold
+            )
+            Text(
+                text = "Local pilot supervisor workspace",
+                style = MaterialTheme.typography.bodyLarge
+            )
+            Spacer(modifier = Modifier.height(12.dp))
+            Card(modifier = Modifier.fillMaxWidth()) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text("Role boundary", fontWeight = FontWeight.Bold)
+                    Text(
+                        "This area is for supervisors, device setup, and validation. " +
+                            "It is available only between shifts."
+                    )
+                    Text(
+                        "Pilot note: this separation improves workflow but does not replace " +
+                            "production identity and authorization.",
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(20.dp))
+            Text("Synchronization service", fontSize = 22.sp, fontWeight = FontWeight.Bold)
+            Spacer(modifier = Modifier.height(8.dp))
+            Card(modifier = Modifier.fillMaxWidth()) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text(
+                        text = when (state.syncRuntimeMode) {
+                            SyncRuntimeMode.DEMO -> "Active mode: Demo validation"
+                            SyncRuntimeMode.LOCAL_VALIDATION ->
+                                "Active mode: Local server validation"
+                            SyncRuntimeMode.PRODUCTION -> "Active mode: Production HTTPS"
+                        },
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text("Production HTTPS contract v1: ready")
+                    Text("Reference API/database: implemented • deployment pending")
+                    Text("Deployment package: ready • infrastructure selection pending")
+                    Text(
+                        text = if (state.canUseLocalValidationServer) {
+                            "Debug builds can use loopback HTTP through adb reverse. " +
+                                "Production connections still require HTTPS."
+                        } else {
+                            "Activation requires an HTTPS server URL and an authenticated token."
+                        },
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
+            }
+            Spacer(modifier = Modifier.height(8.dp))
+            OutlinedButton(
+                onClick = viewModel::toggleSyncConfiguration,
+                enabled = !state.isSyncing,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text(
+                    if (state.isSyncConfigurationOpen) {
+                        "Cancel Server Setup"
+                    } else {
+                        "Configure Sync Server"
+                    }
+                )
+            }
+            if (state.isSyncConfigurationOpen) {
+                Spacer(modifier = Modifier.height(8.dp))
+                Card(modifier = Modifier.fillMaxWidth()) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Text("Authenticated sync server", fontWeight = FontWeight.Bold)
+                        Spacer(modifier = Modifier.height(8.dp))
+                        OutlinedTextField(
+                            value = state.syncEndpointDraft,
+                            onValueChange = viewModel::updateSyncEndpointDraft,
+                            label = { Text("Sync endpoint") },
+                            placeholder = { Text("https://server.example/v1/sync") },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        OutlinedTextField(
+                            value = state.syncTokenDraft,
+                            onValueChange = viewModel::updateSyncTokenDraft,
+                            label = { Text("Access token") },
+                            visualTransformation = PasswordVisualTransformation(),
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        Text(
+                            "The token stays only in this running app session and is cleared " +
+                                "from this field after activation.",
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Button(
+                            onClick = viewModel::activateConfiguredSyncServer,
+                            enabled = state.syncEndpointDraft.isNotBlank() &&
+                                state.syncTokenDraft.isNotBlank(),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text("Activate Server")
+                        }
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
+            Text(driverSyncSummary(state))
+            state.syncMessage?.let { Text(it) }
+            Spacer(modifier = Modifier.height(8.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                OutlinedButton(
+                    onClick = if (state.isDemoSyncMode) {
+                        viewModel::toggleDemoServerAvailability
+                    } else {
+                        viewModel::useDemoSyncMode
+                    },
+                    enabled = !state.isSyncing,
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Text(
+                        if (!state.isDemoSyncMode) {
+                            "Use Demo Mode"
+                        } else if (state.isDemoServerAvailable) {
+                            "Go Offline"
+                        } else {
+                            "Go Online"
+                        }
+                    )
+                }
+                Button(
+                    onClick = viewModel::syncPendingData,
+                    enabled = !state.isSyncing,
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Text(if (state.isSyncing) "Syncing…" else "Sync Now")
+                }
+            }
+
+            Spacer(modifier = Modifier.height(20.dp))
+            Text("Reporting", fontSize = 22.sp, fontWeight = FontWeight.Bold)
+            OutlinedButton(
+                onClick = onOpenAdminReport,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text("Open Admin Report Preview")
+            }
+
+            Spacer(modifier = Modifier.height(24.dp))
+            Button(
+                onClick = onBackToDriverConsole,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text("Return to Driver Console")
+            }
+        }
     }
 }
 
@@ -599,7 +758,8 @@ fun DriverHomeScreen(viewModel: DriverShiftViewModel = viewModel()) {
 private fun AdminReportScreen(
     report: AdminReport?,
     onRefresh: () -> Unit,
-    onBackToDriverConsole: () -> Unit
+    onBackToDriverConsole: () -> Unit,
+    backLabel: String
 ) {
     Surface(modifier = Modifier.fillMaxSize()) {
         Column(
@@ -734,7 +894,7 @@ private fun AdminReportScreen(
                 onClick = onBackToDriverConsole,
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Text("Back to Driver Console")
+                Text(backLabel)
             }
         }
     }
