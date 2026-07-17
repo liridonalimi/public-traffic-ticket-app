@@ -729,6 +729,37 @@ private fun OperationsToolsScreen(
 
             Spacer(modifier = Modifier.height(20.dp))
             Text(
+                stringResource(R.string.printer_certification),
+                fontSize = 22.sp,
+                fontWeight = FontWeight.Bold
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            Card(modifier = Modifier.fillMaxWidth()) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text(
+                        stringResource(R.string.printer_certification_required),
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        stringResource(R.string.printer_simulation_note),
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    listOf(
+                        R.string.cert_pairing,
+                        R.string.cert_paper,
+                        R.string.cert_text,
+                        R.string.cert_qr,
+                        R.string.cert_retry,
+                        R.string.cert_endurance
+                    ).forEach { check ->
+                        Text("• ${stringResource(check)}")
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(20.dp))
+            Text(
                 stringResource(R.string.sync_service),
                 fontSize = 22.sp,
                 fontWeight = FontWeight.Bold
@@ -1327,7 +1358,7 @@ private fun hasLocationPermission(context: Context): Boolean {
 }
 
 private fun printerDisplayName(printer: PrinterDevice): String {
-    return if (printer.address == PdfTicketPrinter.TEST_DEVICE.address) {
+    return if (PdfTicketPrinter.isPdfTestDevice(printer)) {
         printer.name
     } else {
         "${printer.name} (${printer.address})"

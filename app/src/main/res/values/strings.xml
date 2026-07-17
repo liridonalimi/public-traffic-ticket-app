@@ -230,5 +230,15 @@
     <string name="unknown_pdf_printer">Printer testues PDF i panjohur</string>
     <string name="pdf_folder_failed">Dosja PDF e biletave nuk mund të krijohej</string>
     <string name="pdf_creation_failed">PDF-ja e biletës nuk mund të krijohej</string>
-    <string name="pdf_test_printer">Printer testues PDF</string>
+    <string name="pdf_test_printer_58mm">Simulator PDF 58 mm</string>
+    <string name="pdf_test_printer_80mm">Simulator PDF 80 mm</string>
+    <string name="printer_certification">Certifikimi i printerit</string>
+    <string name="printer_certification_required">Kërkohet para përdorimit në prodhim</string>
+    <string name="printer_simulation_note">Përdorni simulatorët PDF 58 mm dhe 80 mm për të kontrolluar gjerësinë, mbështjelljen e tekstit dhe QR-në.</string>
+    <string name="cert_pairing">Çiftimi, rilidhja dhe rikthimi pas fikjes</string>
+    <string name="cert_paper">Gjerësia 58/80 mm, furnizimi me letër dhe prerja</string>
+    <string name="cert_text">Shkronjat shqipe, lexueshmëria dhe mbështjellja</string>
+    <string name="cert_qr">Skanimi i QR-së dhe shenja JO FISKAL</string>
+    <string name="cert_retry">Gabimi, riprovimi dhe mbrojtja nga bileta e dyfishtë</string>
+    <string name="cert_endurance">50 bileta radhazi, bateria dhe temperatura</string>
 </resources>

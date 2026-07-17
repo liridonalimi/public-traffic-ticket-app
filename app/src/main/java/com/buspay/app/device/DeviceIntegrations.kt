@@ -100,6 +100,15 @@ data class PrinterDevice(
     val address: String
 )
 
+enum class ReceiptPaperProfile(
+    val widthMillimeters: Int,
+    val textColumns: Int,
+    val pdfWidthPoints: Int
+) {
+    MM58(widthMillimeters = 58, textColumns = 32, pdfWidthPoints = 164),
+    MM80(widthMillimeters = 80, textColumns = 48, pdfWidthPoints = 226)
+}
+
 data class PrintableTicket(
     val ticketCode: String,
     val busPlateNumber: String,
@@ -189,14 +198,16 @@ class BluetoothEscPosTicketPrinter(private val context: Context) : TicketPrinter
 
 class PdfTicketPrinter(private val context: Context) : TicketPrinter {
     override fun pairedPrinters(): List<PrinterDevice> = listOf(
-        TEST_DEVICE.copy(name = context.getString(R.string.pdf_test_printer))
+        TEST_DEVICE.copy(name = context.getString(R.string.pdf_test_printer_58mm)),
+        TEST_DEVICE_80MM.copy(name = context.getString(R.string.pdf_test_printer_80mm))
     )
 
     override suspend fun printTicket(
         printer: PrinterDevice,
         ticket: PrintableTicket
     ): PrintResult = withContext(Dispatchers.IO) {
-        if (printer.address != TEST_DEVICE.address) {
+        val paperProfile = paperProfile(printer)
+        if (paperProfile == null) {
             return@withContext PrintResult.Failure(context.getString(R.string.unknown_pdf_printer))
         }
 
@@ -209,10 +220,13 @@ class PdfTicketPrinter(private val context: Context) : TicketPrinter {
         }
 
         val safeTicketCode = ticket.ticketCode.replace(Regex("[^A-Za-z0-9_-]"), "_")
-        val outputFile = File(outputDirectory, "ticket-$safeTicketCode.pdf")
+        val outputFile = File(
+            outputDirectory,
+            "ticket-$safeTicketCode-${paperProfile.widthMillimeters}mm.pdf"
+        )
 
         try {
-            writeTicketPdf(outputFile, ticket)
+            writeTicketPdf(outputFile, ticket, paperProfile)
             PrintResult.Success(outputPath = outputFile.absolutePath)
         } catch (error: Exception) {
             PrintResult.Failure(error.message ?: context.getString(R.string.pdf_creation_failed))
@@ -224,14 +238,30 @@ class PdfTicketPrinter(private val context: Context) : TicketPrinter {
             name = "PDF Test Printer",
             address = "pdf://ticket-preview"
         )
+        val TEST_DEVICE_80MM = PrinterDevice(
+            name = "PDF Test Printer 80 mm",
+            address = "pdf://ticket-preview/80mm"
+        )
+
+        fun isPdfTestDevice(printer: PrinterDevice): Boolean = paperProfile(printer) != null
+
+        fun paperProfile(printer: PrinterDevice): ReceiptPaperProfile? = when (printer.address) {
+            TEST_DEVICE.address -> ReceiptPaperProfile.MM58
+            TEST_DEVICE_80MM.address -> ReceiptPaperProfile.MM80
+            else -> null
+        }
     }
 }
 
-private fun writeTicketPdf(outputFile: File, ticket: PrintableTicket) {
+private fun writeTicketPdf(
+    outputFile: File,
+    ticket: PrintableTicket,
+    paperProfile: ReceiptPaperProfile
+) {
     val document = PdfDocument()
     try {
         val pageInfo = PdfDocument.PageInfo.Builder(
-            PDF_PAGE_WIDTH_POINTS,
+            paperProfile.pdfWidthPoints,
             PDF_PAGE_HEIGHT_POINTS,
             1
         ).create()
@@ -248,57 +278,67 @@ private fun writeTicketPdf(outputFile: File, ticket: PrintableTicket) {
         paint.textAlign = Paint.Align.CENTER
         paint.typeface = Typeface.create(Typeface.MONOSPACE, Typeface.BOLD)
         paint.textSize = 13f
-        canvas.drawText("BUSPAY TRANSPORT", PDF_PAGE_WIDTH_POINTS / 2f, y, paint)
+        canvas.drawText("BUSPAY TRANSPORT", paperProfile.pdfWidthPoints / 2f, y, paint)
         y += 13f
 
         paint.typeface = Typeface.create(Typeface.MONOSPACE, Typeface.NORMAL)
         paint.textSize = 7f
-        canvas.drawText("PUBLIC TRANSPORT - DEMO", PDF_PAGE_WIDTH_POINTS / 2f, y, paint)
+        canvas.drawText("TRANSPORT PUBLIK - DEMO", paperProfile.pdfWidthPoints / 2f, y, paint)
         y += 10f
 
         paint.strokeWidth = 1f
-        canvas.drawLine(PDF_MARGIN, y, PDF_PAGE_WIDTH_POINTS - PDF_MARGIN, y, paint)
+        canvas.drawLine(PDF_MARGIN, y, paperProfile.pdfWidthPoints - PDF_MARGIN, y, paint)
         y += 13f
 
         paint.typeface = Typeface.create(Typeface.MONOSPACE, Typeface.BOLD)
         paint.textSize = 12f
-        canvas.drawText("BILETE UDHETIMI", PDF_PAGE_WIDTH_POINTS / 2f, y, paint)
+        canvas.drawText("BILETE UDHETIMI", paperProfile.pdfWidthPoints / 2f, y, paint)
         y += 12f
         paint.textSize = 9f
-        canvas.drawText("KUPON TESTUES - JO FISKAL", PDF_PAGE_WIDTH_POINTS / 2f, y, paint)
+        canvas.drawText("KUPON TESTUES - JO FISKAL", paperProfile.pdfWidthPoints / 2f, y, paint)
         y += 14f
 
         paint.textAlign = Paint.Align.LEFT
         paint.typeface = Typeface.create(Typeface.MONOSPACE, Typeface.NORMAL)
         paint.textSize = 7.5f
+        val quantityColumnX = paperProfile.pdfWidthPoints * QUANTITY_COLUMN_RATIO
         canvas.drawText("LLOJI / FARE", PDF_MARGIN, y, paint)
         paint.textAlign = Paint.Align.CENTER
-        canvas.drawText("SAS.", 117f, y, paint)
+        canvas.drawText("SAS.", quantityColumnX, y, paint)
         paint.textAlign = Paint.Align.RIGHT
-        canvas.drawText("CMIMI", PDF_PAGE_WIDTH_POINTS - PDF_MARGIN, y, paint)
+        canvas.drawText("CMIMI", paperProfile.pdfWidthPoints - PDF_MARGIN, y, paint)
         y += 5f
-        canvas.drawLine(PDF_MARGIN, y, PDF_PAGE_WIDTH_POINTS - PDF_MARGIN, y, paint)
+        canvas.drawLine(PDF_MARGIN, y, paperProfile.pdfWidthPoints - PDF_MARGIN, y, paint)
         y += 11f
 
         paint.textAlign = Paint.Align.LEFT
         paint.typeface = Typeface.create(Typeface.MONOSPACE, Typeface.BOLD)
         canvas.drawText(ticket.fareName.take(19), PDF_MARGIN, y, paint)
         paint.textAlign = Paint.Align.CENTER
-        canvas.drawText("1", 117f, y, paint)
+        canvas.drawText("1", quantityColumnX, y, paint)
         paint.textAlign = Paint.Align.RIGHT
-        canvas.drawText(formatAmountCents(ticket.priceCents), PDF_PAGE_WIDTH_POINTS - PDF_MARGIN, y, paint)
+        canvas.drawText(
+            formatAmountCents(ticket.priceCents),
+            paperProfile.pdfWidthPoints - PDF_MARGIN,
+            y,
+            paint
+        )
         y += 11f
 
         paint.textAlign = Paint.Align.LEFT
         paint.typeface = Typeface.create(Typeface.MONOSPACE, Typeface.NORMAL)
-        wrapPdfText("Linja: ${ticket.routeName}", paint, PDF_PAGE_WIDTH_POINTS - PDF_MARGIN * 2)
+        wrapPdfText(
+            "Linja: ${ticket.routeName}",
+            paint,
+            paperProfile.pdfWidthPoints - PDF_MARGIN * 2
+        )
             .forEach { wrappedLine ->
                 canvas.drawText(wrappedLine, PDF_MARGIN, y, paint)
                 y += 10f
             }
 
         y += 2f
-        canvas.drawLine(PDF_MARGIN, y, PDF_PAGE_WIDTH_POINTS - PDF_MARGIN, y, paint)
+        canvas.drawLine(PDF_MARGIN, y, paperProfile.pdfWidthPoints - PDF_MARGIN, y, paint)
         y += 18f
 
         paint.textAlign = Paint.Align.LEFT
@@ -306,20 +346,29 @@ private fun writeTicketPdf(outputFile: File, ticket: PrintableTicket) {
         paint.textSize = 11f
         canvas.drawText("TOTALI", PDF_MARGIN, y, paint)
         paint.textAlign = Paint.Align.RIGHT
-        canvas.drawText(pdfTicketPriceText(ticket), PDF_PAGE_WIDTH_POINTS - PDF_MARGIN, y, paint)
+        canvas.drawText(
+            pdfTicketPriceText(ticket),
+            paperProfile.pdfWidthPoints - PDF_MARGIN,
+            y,
+            paint
+        )
         y += 15f
 
         paint.textSize = 7.5f
         paint.typeface = Typeface.create(Typeface.MONOSPACE, Typeface.NORMAL)
-        canvas.drawText("PARA TE GATSHME", PDF_PAGE_WIDTH_POINTS - PDF_MARGIN, y, paint)
+        canvas.drawText("PARA TE GATSHME", paperProfile.pdfWidthPoints - PDF_MARGIN, y, paint)
         y += 14f
 
-        canvas.drawLine(PDF_MARGIN, y, PDF_PAGE_WIDTH_POINTS - PDF_MARGIN, y, paint)
+        canvas.drawLine(PDF_MARGIN, y, paperProfile.pdfWidthPoints - PDF_MARGIN, y, paint)
         y += 12f
 
         paint.textAlign = Paint.Align.LEFT
         pdfTicketLines(ticket).forEach { line ->
-            wrapPdfText(line, paint, PDF_PAGE_WIDTH_POINTS - PDF_MARGIN * 2).forEach { wrappedLine ->
+            wrapPdfText(
+                line,
+                paint,
+                paperProfile.pdfWidthPoints - PDF_MARGIN * 2
+            ).forEach { wrappedLine ->
                 canvas.drawText(wrappedLine, PDF_MARGIN, y, paint)
                 y += 10f
             }
@@ -329,11 +378,11 @@ private fun writeTicketPdf(outputFile: File, ticket: PrintableTicket) {
         paint.textAlign = Paint.Align.CENTER
         paint.typeface = Typeface.create(Typeface.MONOSPACE, Typeface.BOLD)
         paint.textSize = 8f
-        canvas.drawText("FALEMINDERIT / THANK YOU", PDF_PAGE_WIDTH_POINTS / 2f, y, paint)
+        canvas.drawText("FALEMINDERIT / THANK YOU", paperProfile.pdfWidthPoints / 2f, y, paint)
         y += 9f
 
         val qrSize = 78f
-        val qrLeft = (PDF_PAGE_WIDTH_POINTS - qrSize) / 2f
+        val qrLeft = (paperProfile.pdfWidthPoints - qrSize) / 2f
         canvas.drawBitmap(
             createQrBitmap(nonFiscalQrPayload(ticket), QR_BITMAP_SIZE),
             null,
@@ -344,10 +393,20 @@ private fun writeTicketPdf(outputFile: File, ticket: PrintableTicket) {
 
         paint.typeface = Typeface.create(Typeface.MONOSPACE, Typeface.NORMAL)
         paint.textSize = 6.5f
-        canvas.drawText("QR TESTUES - TE DHENA LOKALE", PDF_PAGE_WIDTH_POINTS / 2f, y, paint)
+        canvas.drawText(
+            "QR TESTUES - TE DHENA LOKALE",
+            paperProfile.pdfWidthPoints / 2f,
+            y,
+            paint
+        )
         y += 9f
         paint.typeface = Typeface.create(Typeface.MONOSPACE, Typeface.BOLD)
-        canvas.drawText("NUK ESHTE KUPON FISKAL", PDF_PAGE_WIDTH_POINTS / 2f, y, paint)
+        canvas.drawText(
+            "NUK ESHTE KUPON FISKAL",
+            paperProfile.pdfWidthPoints / 2f,
+            y,
+            paint
+        )
 
         document.finishPage(page)
         FileOutputStream(outputFile).use(document::writeTo)
@@ -414,37 +473,90 @@ private fun wrapPdfText(text: String, paint: Paint, maxWidth: Float): List<Strin
     return lines.ifEmpty { listOf("") }
 }
 
-private const val PDF_PAGE_WIDTH_POINTS = 164
 private const val PDF_PAGE_HEIGHT_POINTS = 420
 private const val PDF_MARGIN = 12f
 private const val QR_BITMAP_SIZE = 256
+private const val QUANTITY_COLUMN_RATIO = 0.71f
 
-internal fun buildEscPosTicketBytes(ticket: PrintableTicket): ByteArray {
+internal fun buildEscPosTicketBytes(
+    ticket: PrintableTicket,
+    paperProfile: ReceiptPaperProfile = ReceiptPaperProfile.MM58
+): ByteArray {
     val output = ByteArrayOutputStream()
 
     output.write(byteArrayOf(0x1B, 0x40)) // Initialize.
     output.write(byteArrayOf(0x1B, 0x61, 0x01)) // Center alignment.
     output.write(byteArrayOf(0x1B, 0x45, 0x01)) // Bold on.
     output.write("BUSPAY TRANSPORT\n".toByteArray(StandardCharsets.UTF_8))
-    output.write("TRAVEL TICKET\n".toByteArray(StandardCharsets.UTF_8))
-    output.write("TEST - NOT FISCAL\n".toByteArray(StandardCharsets.UTF_8))
+    output.write("BILETE UDHETIMI\n".toByteArray(StandardCharsets.UTF_8))
+    output.write("TEST - JO FISKAL\n".toByteArray(StandardCharsets.UTF_8))
     output.write(byteArrayOf(0x1B, 0x45, 0x00)) // Bold off.
     output.write(byteArrayOf(0x1B, 0x61, 0x00)) // Left alignment.
-    output.write("-------------------------------\n".toByteArray(StandardCharsets.UTF_8))
-    output.write("Fare       Qty          Price\n".toByteArray(StandardCharsets.UTF_8))
-    output.write("${ticket.fareName}       1   ${formatEuroCents(ticket.priceCents)}\n".toByteArray(StandardCharsets.UTF_8))
-    output.write("-------------------------------\n".toByteArray(StandardCharsets.UTF_8))
-    output.write("TOTAL: ${formatEuroCents(ticket.priceCents)}\n".toByteArray(StandardCharsets.UTF_8))
-    output.write("Cash\n\n".toByteArray(StandardCharsets.UTF_8))
-    output.write("Ticket: ${ticket.ticketCode}\n".toByteArray(StandardCharsets.UTF_8))
-    output.write("Bus: ${ticket.busPlateNumber}\n".toByteArray(StandardCharsets.UTF_8))
-    output.write("Route: ${ticket.routeName}\n".toByteArray(StandardCharsets.UTF_8))
-    output.write("Operator: ${ticket.operatorName}\n".toByteArray(StandardCharsets.UTF_8))
-    output.write("Sold: ${ticket.soldAtText}\n".toByteArray(StandardCharsets.UTF_8))
-    output.write("\nThank you\nNOT A FISCAL RECEIPT\n\n\n".toByteArray(StandardCharsets.UTF_8))
+    output.write(escPosTicketText(ticket, paperProfile).toByteArray(StandardCharsets.UTF_8))
     output.write(byteArrayOf(0x1D, 0x56, 0x00)) // Full cut when supported.
 
     return output.toByteArray()
+}
+
+internal fun escPosTicketText(
+    ticket: PrintableTicket,
+    paperProfile: ReceiptPaperProfile
+): String {
+    val divider = "-".repeat(paperProfile.textColumns)
+    val details = listOf(
+        "Nr. biletes: ${ticket.ticketCode}",
+        "Autobusi: ${ticket.busPlateNumber}",
+        "Linja: ${ticket.routeName}",
+        "Operatori: ${ticket.operatorName}",
+        "Data / Ora: ${ticket.soldAtText}"
+    ).flatMap { wrapReceiptText(it, paperProfile.textColumns) }
+    val fareAndPrice = alignedReceiptRow(
+        left = ticket.fareName,
+        right = formatEuroCents(ticket.priceCents),
+        columns = paperProfile.textColumns
+    )
+    val total = alignedReceiptRow(
+        left = "TOTALI",
+        right = formatEuroCents(ticket.priceCents),
+        columns = paperProfile.textColumns
+    )
+
+    return buildString {
+        appendLine(divider)
+        appendLine(fareAndPrice)
+        appendLine(divider)
+        appendLine(total)
+        appendLine("PARA TE GATSHME")
+        appendLine()
+        details.forEach(::appendLine)
+        appendLine()
+        appendLine("FALEMINDERIT")
+        appendLine("NUK ESHTE KUPON FISKAL")
+        appendLine()
+        appendLine()
+    }
+}
+
+internal fun alignedReceiptRow(left: String, right: String, columns: Int): String {
+    require(columns > right.length + 1)
+    val safeLeft = left.take(columns - right.length - 1)
+    val spaces = " ".repeat(columns - safeLeft.length - right.length)
+    return safeLeft + spaces + right
+}
+
+internal fun wrapReceiptText(text: String, columns: Int): List<String> {
+    require(columns > 0)
+    if (text.isBlank()) return listOf("")
+    val lines = mutableListOf<String>()
+    var remaining = text.trim()
+    while (remaining.length > columns) {
+        val candidate = remaining.take(columns + 1)
+        val breakAt = candidate.lastIndexOf(' ').takeIf { it > 0 } ?: columns
+        lines += remaining.take(breakAt).trimEnd()
+        remaining = remaining.drop(breakAt).trimStart()
+    }
+    if (remaining.isNotEmpty()) lines += remaining
+    return lines
 }
 
 private fun formatEuroCents(cents: Int): String =

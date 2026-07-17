@@ -704,7 +704,7 @@ class DriverShiftViewModel(application: Application) : AndroidViewModel(applicat
 
         uiState = uiState.copy(isPrinting = true, printerMessage = text(R.string.vm_printing_ticket))
         viewModelScope.launch {
-            val selectedTicketPrinter = if (printer.address == PdfTicketPrinter.TEST_DEVICE.address) {
+            val selectedTicketPrinter = if (PdfTicketPrinter.isPdfTestDevice(printer)) {
                 pdfTicketPrinter
             } else {
                 bluetoothTicketPrinter
