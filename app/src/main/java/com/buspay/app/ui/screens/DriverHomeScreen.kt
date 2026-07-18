@@ -729,6 +729,55 @@ private fun OperationsToolsScreen(
 
             Spacer(modifier = Modifier.height(20.dp))
             Text(
+                stringResource(R.string.managed_catalog),
+                fontSize = 22.sp,
+                fontWeight = FontWeight.Bold
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            Card(modifier = Modifier.fillMaxWidth()) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text(
+                        text = state.catalogRevision?.let { revision ->
+                            stringResource(R.string.catalog_revision, revision)
+                        } ?: stringResource(R.string.catalog_demo_fallback),
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        stringResource(
+                            R.string.catalog_counts,
+                            state.availableDrivers.size,
+                            state.buses.size,
+                            state.routes.size,
+                            state.routes.sumOf { it.stops.size },
+                            state.fareTypes.size
+                        )
+                    )
+                    Text(
+                        stringResource(R.string.catalog_offline_note),
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
+            }
+            Spacer(modifier = Modifier.height(8.dp))
+            Button(
+                onClick = viewModel::refreshManagedCatalog,
+                enabled = !state.isDemoSyncMode && !state.isCatalogRefreshing,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text(
+                    stringResource(
+                        if (state.isCatalogRefreshing) {
+                            R.string.refreshing_catalog
+                        } else {
+                            R.string.refresh_managed_catalog
+                        }
+                    )
+                )
+            }
+            state.catalogMessage?.let { Text(it) }
+
+            Spacer(modifier = Modifier.height(20.dp))
+            Text(
                 stringResource(R.string.printer_certification),
                 fontSize = 22.sp,
                 fontWeight = FontWeight.Bold

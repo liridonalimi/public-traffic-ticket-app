@@ -75,6 +75,52 @@ class SyncBatchInput:
         }
 
 
+@dataclass(frozen=True)
+class CatalogDriverInput:
+    id: str
+    name: str
+
+
+@dataclass(frozen=True)
+class CatalogBusInput:
+    id: str
+    plate_number: str
+
+
+@dataclass(frozen=True)
+class CatalogRouteInput:
+    id: str
+    name: str
+
+
+@dataclass(frozen=True)
+class CatalogStopInput:
+    id: str
+    route_id: str
+    name: str
+    latitude: float
+    longitude: float
+    order: int
+
+
+@dataclass(frozen=True)
+class CatalogFareInput:
+    id: str
+    name: str
+    price_cents: int
+    eligibility: str | None
+
+
+@dataclass(frozen=True)
+class CatalogInput:
+    expected_revision: int
+    drivers: List[CatalogDriverInput]
+    buses: List[CatalogBusInput]
+    routes: List[CatalogRouteInput]
+    stops: List[CatalogStopInput]
+    fares: List[CatalogFareInput]
+
+
 def parse_sync_batch(payload: Any) -> SyncBatchInput:
     if not isinstance(payload, dict):
         raise ContractError("Request body must be a JSON object")
@@ -99,6 +145,100 @@ def parse_sync_batch(payload: Any) -> SyncBatchInput:
         sent_at_millis=sent_at_millis,
         shifts=shifts,
         tickets=tickets,
+    )
+
+
+def parse_catalog(payload: Any) -> CatalogInput:
+    if not isinstance(payload, dict):
+        raise ContractError("Request body must be a JSON object")
+    if payload.get("contractVersion") != CONTRACT_VERSION:
+        raise ContractError("Unsupported contract version")
+
+    drivers = [_parse_catalog_driver(value) for value in _required_nonempty_list(payload, "drivers", 500)]
+    buses = [_parse_catalog_bus(value) for value in _required_nonempty_list(payload, "buses", 500)]
+    routes = [_parse_catalog_route(value) for value in _required_nonempty_list(payload, "routes", 500)]
+    stops = [_parse_catalog_stop(value) for value in _required_nonempty_list(payload, "stops", 5_000)]
+    fares = [_parse_catalog_fare(value) for value in _required_nonempty_list(payload, "fares", 500)]
+
+    for values, name in (
+        (drivers, "driver"),
+        (buses, "bus"),
+        (routes, "route"),
+        (stops, "stop"),
+        (fares, "fare"),
+    ):
+        _require_unique([value.id for value in values], name)
+
+    route_ids = {route.id for route in routes}
+    if any(stop.route_id not in route_ids for stop in stops):
+        raise ContractError("Every stop must reference a route in this catalog")
+    route_orders = [(stop.route_id, stop.order) for stop in stops]
+    if len(route_orders) != len(set(route_orders)):
+        raise ContractError("Stop order must be unique within each route")
+    routes_with_stops = {stop.route_id for stop in stops}
+    if route_ids != routes_with_stops:
+        raise ContractError("Every route must contain at least one stop")
+
+    return CatalogInput(
+        expected_revision=_required_integer(payload, "expectedRevision", minimum=0),
+        drivers=drivers,
+        buses=buses,
+        routes=routes,
+        stops=stops,
+        fares=fares,
+    )
+
+
+def _parse_catalog_driver(value: Any) -> CatalogDriverInput:
+    _require_object(value, "driver")
+    return CatalogDriverInput(
+        id=_required_string(value, "id", maximum=80),
+        name=_required_string(value, "name", maximum=160),
+    )
+
+
+def _parse_catalog_bus(value: Any) -> CatalogBusInput:
+    _require_object(value, "bus")
+    return CatalogBusInput(
+        id=_required_string(value, "id", maximum=80),
+        plate_number=_required_string(value, "plateNumber", maximum=40),
+    )
+
+
+def _parse_catalog_route(value: Any) -> CatalogRouteInput:
+    _require_object(value, "route")
+    return CatalogRouteInput(
+        id=_required_string(value, "id", maximum=80),
+        name=_required_string(value, "name", maximum=200),
+    )
+
+
+def _parse_catalog_stop(value: Any) -> CatalogStopInput:
+    _require_object(value, "stop")
+    latitude = _required_number(value, "latitude", -90.0, 90.0)
+    longitude = _required_number(value, "longitude", -180.0, 180.0)
+    return CatalogStopInput(
+        id=_required_string(value, "id", maximum=80),
+        route_id=_required_string(value, "routeId", maximum=80),
+        name=_required_string(value, "name", maximum=200),
+        latitude=latitude,
+        longitude=longitude,
+        order=_required_integer(value, "order", minimum=1, maximum=10_000),
+    )
+
+
+def _parse_catalog_fare(value: Any) -> CatalogFareInput:
+    _require_object(value, "fare")
+    eligibility = value.get("eligibility")
+    if eligibility is not None:
+        if not isinstance(eligibility, str) or len(eligibility) > 300:
+            raise ContractError("Field eligibility must be a string or null")
+        eligibility = eligibility.strip() or None
+    return CatalogFareInput(
+        id=_required_string(value, "id", maximum=80),
+        name=_required_string(value, "name", maximum=160),
+        price_cents=_required_integer(value, "priceCents", minimum=0, maximum=100_000),
+        eligibility=eligibility,
     )
 
 
@@ -157,6 +297,28 @@ def _required_list(value: Dict[str, Any], name: str, maximum: int) -> List[Any]:
     if len(result) > maximum:
         raise ContractError(f"Field {name} exceeds the batch limit")
     return result
+
+
+def _required_nonempty_list(value: Dict[str, Any], name: str, maximum: int) -> List[Any]:
+    result = _required_list(value, name, maximum)
+    if not result:
+        raise ContractError(f"Field {name} must contain at least one record")
+    return result
+
+
+def _require_object(value: Any, record_name: str) -> None:
+    if not isinstance(value, dict):
+        raise ContractError(f"Every {record_name} must be a JSON object")
+
+
+def _required_number(value: Dict[str, Any], name: str, minimum: float, maximum: float) -> float:
+    result = value.get(name)
+    if isinstance(result, bool) or not isinstance(result, (int, float)):
+        raise ContractError(f"Field {name} must be a number")
+    number = float(result)
+    if not minimum <= number <= maximum:
+        raise ContractError(f"Field {name} must be between {minimum} and {maximum}")
+    return number
 
 
 def _require_unique(values: List[str], record_name: str) -> None:

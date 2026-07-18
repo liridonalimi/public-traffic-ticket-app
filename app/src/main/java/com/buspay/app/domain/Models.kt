@@ -66,6 +66,39 @@ data class FareType(
     val eligibility: String? = null
 )
 
+data class ManagedCatalog(
+    val revision: Int,
+    val updatedAtMillis: Long,
+    val drivers: List<Driver>,
+    val buses: List<Bus>,
+    val routes: List<Route>,
+    val fareTypes: List<FareType>
+)
+
+fun ManagedCatalog.isOperationallyValid(): Boolean {
+    if (revision < 1 || drivers.isEmpty() || buses.isEmpty() || routes.isEmpty() || fareTypes.isEmpty()) {
+        return false
+    }
+    if (routes.any { it.stops.isEmpty() }) return false
+    if (listOf(
+            drivers.map(Driver::id),
+            buses.map(Bus::id),
+            routes.map(Route::id),
+            fareTypes.map(FareType::id)
+        ).any { values -> values.size != values.toSet().size }
+    ) {
+        return false
+    }
+    val stops = routes.flatMap(Route::stops)
+    return stops.map(Stop::id).let { it.size == it.toSet().size } &&
+        routes.all { route ->
+            route.stops.map(Stop::order).let { orders ->
+                orders.all { it >= 1 } && orders.size == orders.toSet().size
+            }
+        } &&
+        fareTypes.all { it.priceCents >= 0 }
+}
+
 enum class TicketPrintStatus {
     PENDING,
     PRINTED,

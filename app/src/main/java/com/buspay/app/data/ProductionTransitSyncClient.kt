@@ -65,7 +65,8 @@ data class SyncHttpRequest(
     val headers: Map<String, String>,
     val body: String,
     val connectTimeoutMillis: Int,
-    val readTimeoutMillis: Int
+    val readTimeoutMillis: Int,
+    val method: String = "POST"
 )
 
 data class SyncHttpResponse(
@@ -92,14 +93,16 @@ class UrlConnectionSyncTransport(
             connection as HttpURLConnection
 
             try {
-                connection.requestMethod = "POST"
+                connection.requestMethod = request.method
                 connection.connectTimeout = request.connectTimeoutMillis
                 connection.readTimeout = request.readTimeoutMillis
                 connection.instanceFollowRedirects = false
-                connection.doOutput = true
+                connection.doOutput = request.method != "GET" && request.body.isNotEmpty()
                 request.headers.forEach(connection::setRequestProperty)
-                connection.outputStream.bufferedWriter(Charsets.UTF_8).use { writer ->
-                    writer.write(request.body)
+                if (connection.doOutput) {
+                    connection.outputStream.bufferedWriter(Charsets.UTF_8).use { writer ->
+                        writer.write(request.body)
+                    }
                 }
 
                 val statusCode = connection.responseCode

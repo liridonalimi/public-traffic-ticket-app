@@ -10,10 +10,13 @@ import androidx.lifecycle.viewModelScope
 import com.buspay.app.R
 import com.buspay.app.data.DemoTransitData
 import com.buspay.app.data.DemoTransitSyncClient
+import com.buspay.app.data.CatalogRefreshResult
+import com.buspay.app.data.ManagedCatalogClient
 import com.buspay.app.data.OfflineFirstRepository
 import com.buspay.app.data.SyncRuntimeConfig
 import com.buspay.app.data.SyncRuntimeMode
 import com.buspay.app.data.createTransitSyncClient
+import com.buspay.app.data.createManagedCatalogClient
 import com.buspay.app.device.AndroidGpsTracker
 import com.buspay.app.device.BluetoothEscPosTicketPrinter
 import com.buspay.app.device.DemoStopRequestInput
@@ -27,6 +30,7 @@ import com.buspay.app.domain.AdminReportFilter
 import com.buspay.app.domain.Driver
 import com.buspay.app.domain.DriverShiftSummary
 import com.buspay.app.domain.FareType
+import com.buspay.app.domain.ManagedCatalog
 import com.buspay.app.domain.Route
 import com.buspay.app.domain.RouteProgress
 import com.buspay.app.domain.RouteProgressSource
@@ -42,6 +46,7 @@ import com.buspay.app.domain.isStopRequestReached
 import com.buspay.app.domain.nearestForwardStopIndex
 import com.buspay.app.domain.routeStopStatus
 import com.buspay.app.domain.summarizeTicketsByFare
+import com.buspay.app.domain.isOperationallyValid
 import kotlinx.coroutines.launch
 import java.text.DateFormat
 import java.util.Date
@@ -81,6 +86,10 @@ data class DriverShiftUiState(
     val syncEndpointDraft: String = "http://127.0.0.1:8080/v1/sync",
     val syncTokenDraft: String = "",
     val syncMessage: String? = null,
+    val isCatalogRefreshing: Boolean = false,
+    val catalogRevision: Int? = null,
+    val catalogUpdatedAtMillis: Long? = null,
+    val catalogMessage: String? = null,
     val adminReport: AdminReport? = null,
     val lastClosedSummary: DriverShiftSummary? = null,
     val lastClosedRoute: Route? = null,
@@ -127,6 +136,7 @@ class DriverShiftViewModel(application: Application) : AndroidViewModel(applicat
     private var syncRuntimeConfig = SyncRuntimeConfig.demo()
     private var syncClient = createTransitSyncClient(syncRuntimeConfig)
     private var demoSyncClient = syncClient as? DemoTransitSyncClient
+    private var managedCatalogClient: ManagedCatalogClient? = null
 
     var uiState by mutableStateOf(createInitialState())
         private set
@@ -336,6 +346,7 @@ class DriverShiftViewModel(application: Application) : AndroidViewModel(applicat
                 SyncRuntimeConfig.localValidation(endpoint, token)
             }
             createTransitSyncClient(candidate)
+            createManagedCatalogClient(candidate)
             candidate
         }.getOrElse { failure ->
             uiState = uiState.copy(
@@ -350,6 +361,7 @@ class DriverShiftViewModel(application: Application) : AndroidViewModel(applicat
 
         syncRuntimeConfig = config
         syncClient = createTransitSyncClient(config)
+        managedCatalogClient = createManagedCatalogClient(config)
         demoSyncClient = null
         uiState = uiState.copy(
             syncRuntimeMode = config.mode,
@@ -370,6 +382,7 @@ class DriverShiftViewModel(application: Application) : AndroidViewModel(applicat
         syncRuntimeConfig = SyncRuntimeConfig.demo()
         syncClient = createTransitSyncClient(syncRuntimeConfig)
         demoSyncClient = syncClient as DemoTransitSyncClient
+        managedCatalogClient = null
         uiState = uiState.copy(
             syncRuntimeMode = SyncRuntimeMode.DEMO,
             isDemoSyncMode = true,
@@ -418,6 +431,30 @@ class DriverShiftViewModel(application: Application) : AndroidViewModel(applicat
 
                 is SyncResult.Failure -> {
                     refreshSyncState(message = text(R.string.vm_sync_failed, result.message))
+                }
+            }
+        }
+    }
+
+    fun refreshManagedCatalog() {
+        if (uiState.isShiftActive || uiState.isCatalogRefreshing) return
+        val client = managedCatalogClient
+        if (client == null) {
+            uiState = uiState.copy(catalogMessage = text(R.string.vm_catalog_requires_server))
+            return
+        }
+        uiState = uiState.copy(
+            isCatalogRefreshing = true,
+            catalogMessage = text(R.string.vm_catalog_loading)
+        )
+        viewModelScope.launch {
+            when (val result = client.fetch()) {
+                is CatalogRefreshResult.Success -> applyManagedCatalog(result.catalog)
+                is CatalogRefreshResult.Failure -> {
+                    uiState = uiState.copy(
+                        isCatalogRefreshing = false,
+                        catalogMessage = text(R.string.vm_catalog_failed, result.message)
+                    )
                 }
             }
         }
@@ -499,11 +536,16 @@ class DriverShiftViewModel(application: Application) : AndroidViewModel(applicat
     }
 
     private fun createInitialState(): DriverShiftUiState {
+        val managedCatalog = repository.loadManagedCatalog()?.takeIf(ManagedCatalog::isOperationallyValid)
+        val availableDrivers = managedCatalog?.drivers ?: DemoTransitData.drivers
+        val availableBuses = managedCatalog?.buses ?: DemoTransitData.buses
+        val availableRoutes = managedCatalog?.routes ?: demoRoutes
+        val availableFares = managedCatalog?.fareTypes ?: demoFareTypes
         val restoredShift = repository.loadActiveShift()
         val restoredDriver = restoredShift?.let { shift ->
-            DemoTransitData.drivers.firstOrNull { it.id == shift.driverId }
+            availableDrivers.firstOrNull { it.id == shift.driverId }
         } ?: repository.loadSignedInDriver()?.let { signedInDriver ->
-            DemoTransitData.drivers.firstOrNull { it.id == signedInDriver.id } ?: signedInDriver
+            availableDrivers.firstOrNull { it.id == signedInDriver.id } ?: signedInDriver
         }
         val restoredTickets = restoredShift?.let { shift ->
             repository.loadTicketsForShift(shift.id)
@@ -524,17 +566,17 @@ class DriverShiftViewModel(application: Application) : AndroidViewModel(applicat
         }
 
         return DriverShiftUiState(
-            availableDrivers = DemoTransitData.drivers,
-            selectedDriver = restoredDriver ?: DemoTransitData.drivers.first(),
+            availableDrivers = availableDrivers,
+            selectedDriver = restoredDriver ?: availableDrivers.first(),
             signedInDriver = restoredDriver,
-            buses = DemoTransitData.buses,
-            routes = demoRoutes,
+            buses = availableBuses,
+            routes = availableRoutes,
             selectedBus = restoredShift?.let { shift ->
-                DemoTransitData.buses.firstOrNull { it.id == shift.busId }
-            } ?: DemoTransitData.buses.first(),
+                availableBuses.firstOrNull { it.id == shift.busId }
+            } ?: availableBuses.first(),
             selectedRoute = restoredShift?.let { shift ->
-                demoRoutes.firstOrNull { it.id == shift.routeId }
-            } ?: demoRoutes.first(),
+                availableRoutes.firstOrNull { it.id == shift.routeId }
+            } ?: availableRoutes.first(),
             activeShift = restoredShift,
             routeProgress = restoredProgress ?: restoredShift?.let { shift ->
                 RouteProgress(
@@ -549,8 +591,8 @@ class DriverShiftViewModel(application: Application) : AndroidViewModel(applicat
             stopRequestMessage = restoredStopRequest?.let {
                 text(R.string.vm_stop_request_restored)
             },
-            fareTypes = demoFareTypes,
-            selectedFareType = demoFareTypes.first(),
+            fareTypes = availableFares,
+            selectedFareType = availableFares.first(),
             pairedPrinters = pdfTicketPrinter.pairedPrinters(),
             selectedPrinter = repository.loadPrinter() ?: pdfTicketPrinter.pairedPrinters().first(),
             tickets = restoredTickets,
@@ -561,8 +603,60 @@ class DriverShiftViewModel(application: Application) : AndroidViewModel(applicat
             isDemoSyncMode = syncRuntimeConfig.mode == SyncRuntimeMode.DEMO,
             isDemoServerAvailable = demoSyncClient?.isAvailable == true,
             canUseLocalValidationServer = isDebuggable,
-            adminReport = createAdminReport(activeShiftId = restoredShift?.id)
+            catalogRevision = managedCatalog?.revision,
+            catalogUpdatedAtMillis = managedCatalog?.updatedAtMillis,
+            adminReport = buildAdminReport(
+                closedShifts = repository.closedShiftsForReporting(),
+                tickets = repository.ticketsForReporting().filterNot { it.shiftId == restoredShift?.id },
+                drivers = availableDrivers,
+                buses = availableBuses,
+                routes = availableRoutes,
+                fareTypes = availableFares
+            )
         )
+    }
+
+    private fun applyManagedCatalog(catalog: ManagedCatalog) {
+        if (!catalog.isOperationallyValid() || uiState.isShiftActive) {
+            uiState = uiState.copy(
+                isCatalogRefreshing = false,
+                catalogMessage = text(R.string.vm_catalog_invalid)
+            )
+            return
+        }
+        repository.saveManagedCatalog(catalog)
+        val signedInDriver = uiState.signedInDriver?.let { current ->
+            catalog.drivers.firstOrNull { it.id == current.id }
+        }
+        if (signedInDriver == null && uiState.signedInDriver != null) {
+            repository.clearSignedInDriver()
+        } else if (signedInDriver != null) {
+            repository.saveSignedInDriver(signedInDriver)
+        }
+        uiState = uiState.copy(
+            availableDrivers = catalog.drivers,
+            selectedDriver = catalog.drivers.firstOrNull { it.id == uiState.selectedDriver?.id }
+                ?: catalog.drivers.first(),
+            signedInDriver = signedInDriver,
+            buses = catalog.buses,
+            selectedBus = catalog.buses.firstOrNull { it.id == uiState.selectedBus?.id }
+                ?: catalog.buses.first(),
+            routes = catalog.routes,
+            selectedRoute = catalog.routes.firstOrNull { it.id == uiState.selectedRoute?.id }
+                ?: catalog.routes.first(),
+            fareTypes = catalog.fareTypes,
+            selectedFareType = catalog.fareTypes.firstOrNull { it.id == uiState.selectedFareType?.id }
+                ?: catalog.fareTypes.first(),
+            isCatalogRefreshing = false,
+            catalogRevision = catalog.revision,
+            catalogUpdatedAtMillis = catalog.updatedAtMillis,
+            catalogMessage = if (signedInDriver == null && uiState.signedInDriver != null) {
+                text(R.string.vm_catalog_refreshed_signed_out, catalog.revision)
+            } else {
+                text(R.string.vm_catalog_refreshed, catalog.revision)
+            }
+        )
+        uiState = uiState.copy(adminReport = createAdminReport())
     }
 
     private fun onLocationUpdate(location: com.buspay.app.device.GeoLocation) {
@@ -666,10 +760,10 @@ class DriverShiftViewModel(application: Application) : AndroidViewModel(applicat
         return buildAdminReport(
             closedShifts = repository.closedShiftsForReporting(),
             tickets = reportingTickets,
-            drivers = DemoTransitData.drivers,
-            buses = DemoTransitData.buses,
-            routes = demoRoutes,
-            fareTypes = demoFareTypes,
+            drivers = uiState.availableDrivers,
+            buses = uiState.buses,
+            routes = uiState.routes,
+            fareTypes = uiState.fareTypes,
             filter = filter
         )
     }

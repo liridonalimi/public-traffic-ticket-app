@@ -7,7 +7,7 @@ import tempfile
 import unittest
 
 from buspay_server.application import BusPayApplication
-from buspay_server.contract import ContractError, parse_sync_batch
+from buspay_server.contract import ContractError, parse_catalog, parse_sync_batch
 from buspay_server.database import SyncDatabase
 
 
@@ -41,6 +41,34 @@ def batch_payload(request_id="sync-0123456789abcdef", price_cents=30):
     }
 
 
+def catalog_payload(expected_revision=1):
+    return {
+        "contractVersion": 1,
+        "expectedRevision": expected_revision,
+        "drivers": [{"id": "driver-managed", "name": "Besa Gashi"}],
+        "buses": [{"id": "bus-managed", "plateNumber": "01-900-KS"}],
+        "routes": [{"id": "route-managed", "name": "Linja Testuese"}],
+        "stops": [
+            {
+                "id": "stop-managed",
+                "routeId": "route-managed",
+                "name": "Ndalesa Testuese",
+                "latitude": 42.66,
+                "longitude": 21.16,
+                "order": 1,
+            }
+        ],
+        "fares": [
+            {
+                "id": "standard",
+                "name": "E rregullt",
+                "priceCents": 60,
+                "eligibility": None,
+            }
+        ],
+    }
+
+
 class ContractTest(unittest.TestCase):
     def test_contract_rejects_active_duplicate_and_unsupported_records(self):
         active = batch_payload()
@@ -53,6 +81,20 @@ class ContractTest(unittest.TestCase):
         for invalid in (active, duplicate, unsupported):
             with self.assertRaises(ContractError):
                 parse_sync_batch(invalid)
+
+    def test_catalog_requires_complete_consistent_reference_data(self):
+        parsed = parse_catalog(catalog_payload())
+        missing_route = catalog_payload()
+        missing_route["stops"][0]["routeId"] = "unknown"
+        duplicate_order = catalog_payload()
+        duplicate_order["stops"].append(
+            {**duplicate_order["stops"][0], "id": "stop-managed-2"}
+        )
+
+        self.assertEqual("Besa Gashi", parsed.drivers[0].name)
+        for invalid in (missing_route, duplicate_order):
+            with self.assertRaises(ContractError):
+                parse_catalog(invalid)
 
 
 class DatabaseTest(unittest.TestCase):
@@ -107,6 +149,21 @@ class DatabaseTest(unittest.TestCase):
         self.assertEqual(4, report["overall"]["shiftCount"])
         self.assertEqual(12, report["overall"]["ticketCount"])
         self.assertEqual(400, report["overall"]["cashTotalCents"])
+
+    def test_catalog_is_seeded_replaced_atomically_and_versioned(self):
+        initial = self.database.catalog()
+        replaced = self.database.replace_catalog(parse_catalog(catalog_payload(initial["revision"])))
+        restarted = SyncDatabase(self.database_path).catalog()
+
+        self.assertGreater(len(initial["drivers"]), 1)
+        self.assertEqual(initial["revision"] + 1, replaced["revision"])
+        self.assertEqual("driver-managed", restarted["drivers"][0]["id"])
+        self.assertEqual(60, restarted["fares"][0]["priceCents"])
+
+        with self.assertRaises(ContractError) as conflict:
+            self.database.replace_catalog(parse_catalog(catalog_payload(initial["revision"])))
+        self.assertEqual(409, conflict.exception.status_code)
+        self.assertEqual(replaced, self.database.catalog())
 
 
 class ApplicationTest(unittest.TestCase):
@@ -193,6 +250,9 @@ class ApplicationTest(unittest.TestCase):
         self.assertIn(b"BusPay Control", html)
         self.assertIn(b"/admin/assets/admin.css", html)
         self.assertIn(b"/v1/reports/admin", javascript)
+        self.assertIn(b"/v1/catalog", javascript)
+        self.assertIn(b"Operations catalog", html)
+        self.assertIn(b"Publish catalog", html)
         self.assertIn(b"Authorization", javascript)
         self.assertNotIn(b"localStorage", javascript)
         self.assertNotIn(b"sessionStorage", javascript)
@@ -211,6 +271,29 @@ class ApplicationTest(unittest.TestCase):
         self.assertEqual(401, missing)
         self.assertIn("Bearer", missing_headers["WWW-Authenticate"])
         self.assertEqual(401, wrong)
+
+    def test_catalog_requires_authentication_and_supports_versioned_replace(self):
+        missing_status, _, _ = self.request("GET", "/v1/catalog")
+        get_status, _, initial = self.request("GET", "/v1/catalog", token=TOKEN)
+        update_status, _, updated = self.request(
+            "PUT",
+            "/v1/catalog",
+            catalog_payload(initial["revision"]),
+            TOKEN,
+        )
+        stale_status, _, stale = self.request(
+            "PUT",
+            "/v1/catalog",
+            catalog_payload(initial["revision"]),
+            TOKEN,
+        )
+
+        self.assertEqual(401, missing_status)
+        self.assertEqual(200, get_status)
+        self.assertEqual(200, update_status)
+        self.assertEqual(initial["revision"] + 1, updated["revision"])
+        self.assertEqual(409, stale_status)
+        self.assertIn("refresh", stale["error"])
 
     def test_authenticated_sync_replay_and_report_reconcile(self):
         first_status, first_headers, acknowledgement = self.request(

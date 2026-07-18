@@ -7,7 +7,7 @@ import json
 from pathlib import Path
 from typing import Any, Callable, Dict, Iterable, Tuple
 
-from .contract import CONTRACT_VERSION, ContractError, parse_sync_batch
+from .contract import CONTRACT_VERSION, ContractError, parse_catalog, parse_sync_batch
 from .database import SyncDatabase
 
 
@@ -83,6 +83,16 @@ class BusPayApplication:
             if unauthorized is not None:
                 return unauthorized
             return self._json_response(200, self.database.report())
+        if path == "/v1/catalog":
+            if method not in ("GET", "PUT"):
+                return self._method_not_allowed("GET, PUT")
+            unauthorized = self._authenticate(environ)
+            if unauthorized is not None:
+                return unauthorized
+            if method == "GET":
+                return self._json_response(200, self.database.catalog())
+            payload = self._read_json(environ)
+            return self._json_response(200, self.database.replace_catalog(parse_catalog(payload)))
         return self._json_response(
             404,
             {"error": "Endpoint not found", "contractVersion": CONTRACT_VERSION},

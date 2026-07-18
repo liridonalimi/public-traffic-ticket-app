@@ -114,6 +114,80 @@
         </article>
       </section>
 
+      <section class="panel catalog-panel" aria-labelledby="catalog-title">
+        <div class="panel-heading catalog-heading">
+          <div>
+            <p class="eyebrow">Managed reference data</p>
+            <h2 id="catalog-title">Operations catalog</h2>
+            <p class="catalog-summary" id="catalog-summary">Loading drivers, buses, routes, stops, and fares…</p>
+          </div>
+          <div class="toolbar-actions">
+            <button class="quiet-button" type="button" id="reload-catalog-button">Discard draft</button>
+            <button class="secondary-button" type="button" id="save-catalog-button">Publish catalog</button>
+          </div>
+        </div>
+        <p class="dashboard-status" id="catalog-status" role="status" aria-live="polite"></p>
+        <p class="catalog-guidance">Changes are published together as one revision. Enter an existing ID to update it. Removing a route also removes its draft stops.</p>
+
+        <div class="catalog-grid">
+          <article class="catalog-entity">
+            <h3>Drivers</h3>
+            <form class="catalog-form" data-entity="drivers">
+              <input name="id" placeholder="driver-004" aria-label="Driver ID" required>
+              <input name="name" placeholder="Full name" aria-label="Driver name" required>
+              <button class="primary-button" type="submit">Add / update</button>
+            </form>
+            <div class="catalog-list" id="catalog-drivers"></div>
+          </article>
+
+          <article class="catalog-entity">
+            <h3>Buses</h3>
+            <form class="catalog-form" data-entity="buses">
+              <input name="id" placeholder="bus-400" aria-label="Bus ID" required>
+              <input name="plateNumber" placeholder="01-400-KS" aria-label="Plate number" required>
+              <button class="primary-button" type="submit">Add / update</button>
+            </form>
+            <div class="catalog-list" id="catalog-buses"></div>
+          </article>
+
+          <article class="catalog-entity">
+            <h3>Routes</h3>
+            <form class="catalog-form" data-entity="routes">
+              <input name="id" placeholder="route-3" aria-label="Route ID" required>
+              <input name="name" placeholder="Route name" aria-label="Route name" required>
+              <button class="primary-button" type="submit">Add / update</button>
+            </form>
+            <div class="catalog-list" id="catalog-routes"></div>
+          </article>
+
+          <article class="catalog-entity catalog-entity-wide">
+            <h3>Stops</h3>
+            <form class="catalog-form catalog-form-stops" data-entity="stops">
+              <input name="id" placeholder="stop-7" aria-label="Stop ID" required>
+              <select name="routeId" aria-label="Stop route" required></select>
+              <input name="name" placeholder="Stop name" aria-label="Stop name" required>
+              <input name="latitude" type="number" step="any" min="-90" max="90" placeholder="42.6600" aria-label="Latitude" required>
+              <input name="longitude" type="number" step="any" min="-180" max="180" placeholder="21.1600" aria-label="Longitude" required>
+              <input name="order" type="number" min="1" max="10000" placeholder="1" aria-label="Stop order" required>
+              <button class="primary-button" type="submit">Add / update</button>
+            </form>
+            <div class="catalog-list" id="catalog-stops"></div>
+          </article>
+
+          <article class="catalog-entity catalog-entity-wide">
+            <h3>Fares</h3>
+            <form class="catalog-form catalog-form-fares" data-entity="fares">
+              <input name="id" placeholder="visitor" aria-label="Fare ID" required>
+              <input name="name" placeholder="Fare name" aria-label="Fare name" required>
+              <input name="priceCents" type="number" min="0" max="100000" placeholder="50" aria-label="Price in cents" required>
+              <input name="eligibility" placeholder="Eligibility (optional)" aria-label="Fare eligibility">
+              <button class="primary-button" type="submit">Add / update</button>
+            </form>
+            <div class="catalog-list" id="catalog-fares"></div>
+          </article>
+        </div>
+      </section>
+
       <section class="panel shift-panel" aria-labelledby="shift-title">
         <div class="panel-heading shift-heading">
           <div>

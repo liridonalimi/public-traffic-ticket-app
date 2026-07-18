@@ -4,6 +4,15 @@ const elements = {
   authForm: document.querySelector("#auth-form"),
   authPanel: document.querySelector("#auth-panel"),
   authStatus: document.querySelector("#auth-status"),
+  catalogSummary: document.querySelector("#catalog-summary"),
+  catalogStatus: document.querySelector("#catalog-status"),
+  catalogDrivers: document.querySelector("#catalog-drivers"),
+  catalogBuses: document.querySelector("#catalog-buses"),
+  catalogRoutes: document.querySelector("#catalog-routes"),
+  catalogStops: document.querySelector("#catalog-stops"),
+  catalogFares: document.querySelector("#catalog-fares"),
+  reloadCatalogButton: document.querySelector("#reload-catalog-button"),
+  saveCatalogButton: document.querySelector("#save-catalog-button"),
   connectButton: document.querySelector("#connect-button"),
   connectionState: document.querySelector("#connection-state"),
   connectionLabel: document.querySelector("#connection-label"),
@@ -29,6 +38,7 @@ const elements = {
 
 let bearerToken = "";
 let currentReport = null;
+let currentCatalog = null;
 
 const money = new Intl.NumberFormat("en", { style: "currency", currency: "EUR" });
 const timestamp = new Intl.DateTimeFormat("en", { dateStyle: "medium", timeStyle: "short" });
@@ -208,6 +218,169 @@ function renderReport(report) {
   elements.generatedTime.textContent = `Report generated ${formatTime(report.generatedAtMillis)}`;
 }
 
+function catalogRow(entity, record, primary, secondary) {
+  const row = document.createElement("div");
+  row.className = "catalog-row";
+  const copy = document.createElement("div");
+  const strong = document.createElement("strong");
+  strong.textContent = primary;
+  const span = document.createElement("span");
+  span.textContent = secondary;
+  copy.append(strong, span);
+  const remove = document.createElement("button");
+  remove.type = "button";
+  remove.className = "catalog-remove";
+  remove.textContent = "Remove";
+  remove.addEventListener("click", () => removeCatalogRecord(entity, record.id));
+  row.append(copy, remove);
+  return row;
+}
+
+function renderCatalog() {
+  if (!currentCatalog) return;
+  const counts = [
+    `${currentCatalog.drivers.length} drivers`,
+    `${currentCatalog.buses.length} buses`,
+    `${currentCatalog.routes.length} routes`,
+    `${currentCatalog.stops.length} stops`,
+    `${currentCatalog.fares.length} fares`,
+  ];
+  elements.catalogSummary.textContent = `Revision ${currentCatalog.revision} · ${counts.join(" · ")}`;
+  elements.catalogDrivers.replaceChildren(...currentCatalog.drivers.map((record) =>
+    catalogRow("drivers", record, record.name, record.id)
+  ));
+  elements.catalogBuses.replaceChildren(...currentCatalog.buses.map((record) =>
+    catalogRow("buses", record, record.plateNumber, record.id)
+  ));
+  elements.catalogRoutes.replaceChildren(...currentCatalog.routes.map((record) =>
+    catalogRow("routes", record, record.name, record.id)
+  ));
+  elements.catalogStops.replaceChildren(...[...currentCatalog.stops]
+    .sort((left, right) => left.routeId.localeCompare(right.routeId) || left.order - right.order)
+    .map((record) => catalogRow(
+      "stops",
+      record,
+      `${record.order}. ${record.name}`,
+      `${record.routeId} · ${record.latitude}, ${record.longitude}`
+    )));
+  elements.catalogFares.replaceChildren(...currentCatalog.fares.map((record) =>
+    catalogRow(
+      "fares",
+      record,
+      `${record.name} · ${formatMoney(record.priceCents)}`,
+      `${record.id}${record.eligibility ? ` · ${record.eligibility}` : ""}`
+    )
+  ));
+
+  document.querySelectorAll('form[data-entity="stops"] select[name="routeId"]').forEach((select) => {
+    const selected = select.value;
+    select.replaceChildren(option("", "Select route"));
+    currentCatalog.routes.forEach((route) => select.append(option(route.id, route.name)));
+    if (currentCatalog.routes.some((route) => route.id === selected)) select.value = selected;
+  });
+}
+
+function removeCatalogRecord(entity, id) {
+  if (!currentCatalog) return;
+  currentCatalog[entity] = currentCatalog[entity].filter((record) => record.id !== id);
+  if (entity === "routes") {
+    currentCatalog.stops = currentCatalog.stops.filter((stop) => stop.routeId !== id);
+  }
+  elements.catalogStatus.textContent = "Draft changed. Publish to make it available to tablets.";
+  renderCatalog();
+}
+
+function catalogRecordFromForm(entity, form) {
+  const values = Object.fromEntries(new FormData(form).entries());
+  const trimmed = Object.fromEntries(
+    Object.entries(values).map(([key, value]) => [key, String(value).trim()])
+  );
+  if (entity === "stops") {
+    return {
+      ...trimmed,
+      latitude: Number(trimmed.latitude),
+      longitude: Number(trimmed.longitude),
+      order: Number(trimmed.order),
+    };
+  }
+  if (entity === "fares") {
+    return {
+      ...trimmed,
+      priceCents: Number(trimmed.priceCents),
+      eligibility: trimmed.eligibility || null,
+    };
+  }
+  return trimmed;
+}
+
+function updateCatalogDraft(entity, record) {
+  if (!currentCatalog) return;
+  const existingIndex = currentCatalog[entity].findIndex((value) => value.id === record.id);
+  if (existingIndex === -1) currentCatalog[entity].push(record);
+  else currentCatalog[entity][existingIndex] = record;
+  elements.catalogStatus.textContent = "Draft changed. Publish to make it available to tablets.";
+  renderCatalog();
+}
+
+async function loadCatalog() {
+  if (!bearerToken) return;
+  elements.reloadCatalogButton.disabled = true;
+  elements.catalogStatus.textContent = "Loading the published catalog…";
+  try {
+    const response = await fetch("/v1/catalog", {
+      method: "GET",
+      cache: "no-store",
+      credentials: "omit",
+      headers: { Authorization: `Bearer ${bearerToken}` },
+    });
+    if (response.status === 401) throw new Error("The access token was rejected.");
+    if (!response.ok) throw new Error(`The catalog service returned HTTP ${response.status}.`);
+    const catalog = await response.json();
+    if (catalog.contractVersion !== 1) throw new Error("Unsupported catalog contract version.");
+    currentCatalog = catalog;
+    renderCatalog();
+    elements.catalogStatus.textContent = "Published catalog loaded.";
+  } finally {
+    elements.reloadCatalogButton.disabled = false;
+  }
+}
+
+async function saveCatalog() {
+  if (!bearerToken || !currentCatalog) return;
+  elements.saveCatalogButton.disabled = true;
+  elements.catalogStatus.textContent = "Publishing the complete catalog…";
+  try {
+    const response = await fetch("/v1/catalog", {
+      method: "PUT",
+      cache: "no-store",
+      credentials: "omit",
+      headers: {
+        Authorization: `Bearer ${bearerToken}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        contractVersion: 1,
+        expectedRevision: currentCatalog.revision,
+        drivers: currentCatalog.drivers,
+        buses: currentCatalog.buses,
+        routes: currentCatalog.routes,
+        stops: currentCatalog.stops,
+        fares: currentCatalog.fares,
+      }),
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (response.status === 401) throw new Error("The access token was rejected.");
+    if (!response.ok) throw new Error(payload.error || `Catalog publication returned HTTP ${response.status}.`);
+    currentCatalog = payload;
+    renderCatalog();
+    elements.catalogStatus.textContent = `Catalog revision ${payload.revision} published. Tablets can refresh now.`;
+  } catch (error) {
+    elements.catalogStatus.textContent = error instanceof Error ? error.message : "Unable to publish the catalog.";
+  } finally {
+    elements.saveCatalogButton.disabled = false;
+  }
+}
+
 async function loadReport() {
   if (!bearerToken) return;
   elements.refreshButton.disabled = true;
@@ -224,6 +397,7 @@ async function loadReport() {
     const report = await response.json();
     if (report.contractVersion !== 1) throw new Error("Unsupported reporting contract version.");
     renderReport(report);
+    await loadCatalog();
     elements.tokenInput.value = "";
     elements.authPanel.hidden = true;
     elements.dashboard.hidden = false;
@@ -244,6 +418,7 @@ async function loadReport() {
 function signOut(focus = true) {
   bearerToken = "";
   currentReport = null;
+  currentCatalog = null;
   elements.tokenInput.value = "";
   elements.dashboard.hidden = true;
   elements.authPanel.hidden = false;
@@ -262,6 +437,22 @@ elements.authForm.addEventListener("submit", (event) => {
 });
 elements.refreshButton.addEventListener("click", loadReport);
 elements.signOutButton.addEventListener("click", () => signOut());
+elements.reloadCatalogButton.addEventListener("click", () => {
+  loadCatalog().catch((error) => {
+    elements.catalogStatus.textContent = error instanceof Error ? error.message : "Unable to load the catalog.";
+  });
+});
+elements.saveCatalogButton.addEventListener("click", saveCatalog);
+document.querySelectorAll(".catalog-form").forEach((form) => {
+  form.addEventListener("submit", (event) => {
+    event.preventDefault();
+    const entity = form.dataset.entity;
+    if (!entity || !currentCatalog) return;
+    updateCatalogDraft(entity, catalogRecordFromForm(entity, form));
+    form.reset();
+    renderCatalog();
+  });
+});
 elements.driverFilter.addEventListener("change", renderShifts);
 elements.fareFilter.addEventListener("change", renderShifts);
 elements.shiftSearch.addEventListener("input", renderShifts);

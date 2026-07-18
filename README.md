@@ -45,6 +45,8 @@ It currently includes:
 - Kosovo-oriented pilot terminology for lines, stops, fares, shifts, and cash sales
 - 58 mm and 80 mm PDF receipt simulation with width-aware ESC/POS formatting
 - visible printer hardware certification gate for pairing, output, retry, and endurance checks
+- versioned central catalog for drivers, buses, routes, stops, and fares
+- authenticated web catalog editing with atomic publication and tablet offline refresh
 - cash ticket count and cash total during an active shift
 - persistent local active shift storage
 - persistent local ticket storage for future sync
@@ -74,6 +76,7 @@ It currently includes:
 17. Driver pilot UX and role separation - complete
 18. Albanian-first localization and Kosovo operator terminology - complete
 19. Printer simulation, receipt quality, and hardware certification - complete (physical-printer certification pending hardware)
+20. Centrally managed drivers, buses, routes, stops, and fares - complete
 
 ## Documentation
 
@@ -98,6 +101,7 @@ Presentation documentation:
 - English: `docs/EN/17-driver-pilot-ux-and-role-separation.md`
 - English: `docs/EN/18-albanian-first-localization.md`
 - English: `docs/EN/19-printer-simulation-and-certification.md`
+- English: `docs/EN/20-central-operations-catalog.md`
 - Albanian: `docs/SQ/01-themeli-i-projektit-dhe-skeleti-android.md`
 - Albanian: `docs/SQ/02-rrjedha-e-turnit-te-shoferit.md`
 - Albanian: `docs/SQ/03-ruajtja-lokale-e-biletave.md`
@@ -117,6 +121,7 @@ Presentation documentation:
 - Albanian: `docs/SQ/17-pervoja-e-pilotit-per-shoferin-dhe-ndarja-e-roleve.md`
 - Albanian: `docs/SQ/18-lokalizimi-me-shqipen-si-gjuhe-kryesore.md`
 - Albanian: `docs/SQ/19-simulimi-i-printerit-dhe-certifikimi.md`
+- Albanian: `docs/SQ/20-katalogu-qendror-i-operacioneve.md`
 
 Technical documentation:
 
@@ -139,13 +144,14 @@ Technical documentation:
 - `docs/TECHNICAL/17-driver-pilot-ux-and-role-separation.md`
 - `docs/TECHNICAL/18-albanian-first-localization.md`
 - `docs/TECHNICAL/19-printer-simulation-and-certification.md`
+- `docs/TECHNICAL/20-central-operations-catalog.md`
 
 ## Next build milestone
 
 Client-readiness continues with:
 
-1. Module 20: centrally managed drivers, buses, routes, stops, and fares.
-2. Select hosting infrastructure and activate the already prepared staging release gate when a domain and accountable operator are available.
+1. Select hosting infrastructure and activate the already prepared staging release gate when a domain and accountable operator are available.
+2. Replace the shared pilot token with production identity and role-scoped administration.
 
 #######################################
 
@@ -196,6 +202,8 @@ Aktualisht përfshin:
 - terminologjinë e pilotit për Kosovën për linjat, ndalesat, tarifat, turnet dhe shitjet me para të gatshme
 - simulimin PDF të kuponit 58 mm dhe 80 mm me formatim ESC/POS sipas gjerësisë
 - kontrollin e dukshëm të certifikimit të printerit për çiftim, dalje, riprovim dhe qëndrueshmëri
+- katalogun qendror të versionuar për shoferët, autobusët, linjat, ndalesat dhe tarifat
+- redaktimin e autentikuar në web me publikim atomik dhe rifreskim offline në tablet
 - numërimin e biletave me para të gatshme dhe totalin e arkës gjatë turnit aktiv
 - ruajtjen lokale të turnit aktiv
 - ruajtjen lokale të biletave për sinkronizim të ardhshëm
@@ -225,10 +233,11 @@ Aktualisht përfshin:
 17. Përvoja e pilotit për shoferin dhe ndarja e roleve - përfunduar
 18. Lokalizimi me shqipen si gjuhë kryesore dhe terminologjia e operatorit në Kosovë - përfunduar
 19. Simulimi i printerit, cilësia e kuponit dhe certifikimi i pajisjes - përfunduar (certifikimi i printerit fizik pret pajisjen)
+20. Menaxhimi qendror i shoferëve, autobusëve, linjave, ndalesave dhe tarifave - përfunduar
 
 ## Pika e ndërtimit tjetër
 
 Gatishmëria për klientin vazhdon me:
 
-1. Moduli 20: menaxhimi qendror i shoferëve, autobusëve, linjave, ndalesave dhe tarifave.
-2. Zgjidhni infrastrukturën dhe aktivizoni kontrollin staging tashmë të përgatitur kur të ketë domain dhe operator përgjegjës.
+1. Zgjidhni infrastrukturën dhe aktivizoni kontrollin staging tashmë të përgatitur kur të ketë domain dhe operator përgjegjës.
+2. Zëvendësoni tokenin e përbashkët të pilotit me identitet prodhimi dhe administrim sipas roleve.

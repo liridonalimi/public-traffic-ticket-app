@@ -53,3 +53,19 @@ fun createTransitSyncClient(config: SyncRuntimeConfig): TransitSyncClient = when
         )
     )
 }
+
+fun createManagedCatalogClient(config: SyncRuntimeConfig): ManagedCatalogClient? = when (config.mode) {
+    SyncRuntimeMode.DEMO -> null
+    SyncRuntimeMode.LOCAL_VALIDATION -> ManagedCatalogClient(
+        ProductionSyncConfig.localValidation(
+            endpointUrl = requireNotNull(config.endpointUrl),
+            accessToken = requireNotNull(config.accessToken)
+        )
+    )
+    SyncRuntimeMode.PRODUCTION -> ManagedCatalogClient(
+        ProductionSyncConfig(
+            endpointUrl = requireNotNull(config.endpointUrl),
+            accessToken = requireNotNull(config.accessToken)
+        )
+    )
+}

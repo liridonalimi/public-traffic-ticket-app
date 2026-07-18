@@ -3,7 +3,12 @@ package com.buspay.app.data
 import android.content.Context
 import android.content.SharedPreferences
 import com.buspay.app.domain.Driver
+import com.buspay.app.domain.Bus
+import com.buspay.app.domain.FareType
+import com.buspay.app.domain.ManagedCatalog
+import com.buspay.app.domain.Route
 import com.buspay.app.domain.Shift
+import com.buspay.app.domain.Stop
 import com.buspay.app.domain.StopRequest
 import com.buspay.app.domain.RouteProgress
 import com.buspay.app.domain.RouteProgressSource
@@ -146,6 +151,57 @@ class OfflineFirstRepository(context: Context) {
         return PrinterDevice(name = name, address = address)
     }
 
+    fun saveManagedCatalog(catalog: ManagedCatalog) {
+        val value = JSONObject()
+            .put("revision", catalog.revision)
+            .put("updatedAtMillis", catalog.updatedAtMillis)
+            .put("drivers", JSONArray().also { values ->
+                catalog.drivers.forEach { values.put(it.toJson()) }
+            })
+            .put("buses", JSONArray().also { values ->
+                catalog.buses.forEach { bus ->
+                    values.put(JSONObject().put("id", bus.id).put("plateNumber", bus.plateNumber))
+                }
+            })
+            .put("routes", JSONArray().also { values ->
+                catalog.routes.forEach { route ->
+                    values.put(
+                        JSONObject()
+                            .put("id", route.id)
+                            .put("name", route.name)
+                            .put("stops", JSONArray().also { stops ->
+                                route.stops.forEach { stop ->
+                                    stops.put(
+                                        JSONObject()
+                                            .put("id", stop.id)
+                                            .put("name", stop.name)
+                                            .put("latitude", stop.latitude)
+                                            .put("longitude", stop.longitude)
+                                            .put("order", stop.order)
+                                    )
+                                }
+                            })
+                    )
+                }
+            })
+            .put("fares", JSONArray().also { values ->
+                catalog.fareTypes.forEach { fare ->
+                    values.put(
+                        JSONObject()
+                            .put("id", fare.id)
+                            .put("name", fare.name)
+                            .put("priceCents", fare.priceCents)
+                            .put("eligibility", fare.eligibility)
+                    )
+                }
+            })
+        preferences.edit().putString(KEY_MANAGED_CATALOG, value.toString()).apply()
+    }
+
+    fun loadManagedCatalog(): ManagedCatalog? = preferences
+        .getString(KEY_MANAGED_CATALOG, null)
+        ?.let { raw -> runCatching { managedCatalogFromJson(JSONObject(raw)) }.getOrNull() }
+
     private fun loadTickets(): List<Ticket> {
         val rawTickets = preferences.getString(KEY_TICKETS, null) ?: return emptyList()
         val ticketArray = JSONArray(rawTickets)
@@ -240,6 +296,7 @@ class OfflineFirstRepository(context: Context) {
         const val KEY_STOP_REQUEST = "stop_request"
         const val KEY_PRINTER_ADDRESS = "printer_address"
         const val KEY_PRINTER_NAME = "printer_name"
+        const val KEY_MANAGED_CATALOG = "managed_catalog"
 
         fun driverFromJson(json: JSONObject): Driver {
             return Driver(
@@ -311,5 +368,50 @@ class OfflineFirstRepository(context: Context) {
                 requestedAtMillis = json.optLong("requestedAtMillis", 0L)
             )
         }
+
+        fun managedCatalogFromJson(json: JSONObject): ManagedCatalog {
+            val drivers = json.getJSONArray("drivers").mapObjects { value ->
+                driverFromJson(value)
+            }
+            val buses = json.getJSONArray("buses").mapObjects { value ->
+                Bus(id = value.getString("id"), plateNumber = value.getString("plateNumber"))
+            }
+            val routes = json.getJSONArray("routes").mapObjects { value ->
+                Route(
+                    id = value.getString("id"),
+                    name = value.getString("name"),
+                    stops = value.getJSONArray("stops").mapObjects { stop ->
+                        Stop(
+                            id = stop.getString("id"),
+                            name = stop.getString("name"),
+                            latitude = stop.getDouble("latitude"),
+                            longitude = stop.getDouble("longitude"),
+                            order = stop.getInt("order")
+                        )
+                    }.sortedBy(Stop::order)
+                )
+            }
+            val fares = json.getJSONArray("fares").mapObjects { value ->
+                FareType(
+                    id = value.getString("id"),
+                    name = value.getString("name"),
+                    priceCents = value.getInt("priceCents"),
+                    eligibility = if (value.isNull("eligibility")) null else value.getString("eligibility")
+                )
+            }
+            return ManagedCatalog(
+                revision = json.getInt("revision"),
+                updatedAtMillis = json.getLong("updatedAtMillis"),
+                drivers = drivers,
+                buses = buses,
+                routes = routes,
+                fareTypes = fares
+            )
+        }
+
+        private inline fun <T> JSONArray.mapObjects(transform: (JSONObject) -> T): List<T> =
+            buildList {
+                for (index in 0 until length()) add(transform(getJSONObject(index)))
+            }
     }
 }

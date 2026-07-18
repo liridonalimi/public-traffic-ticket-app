@@ -92,6 +92,13 @@
     <string name="role_boundary">Kufiri i rolit</string>
     <string name="role_boundary_description">Kjo hapësirë është për mbikëqyrësit, konfigurimin e pajisjes dhe validimin. Është në dispozicion vetëm ndërmjet turneve.</string>
     <string name="pilot_security_note">Shënim: kjo ndarje e përmirëson rrjedhën e punës, por nuk e zëvendëson identitetin dhe autorizimin në prodhim.</string>
+    <string name="managed_catalog">Të dhënat qendrore</string>
+    <string name="catalog_revision">Katalogu i menaxhuar • revizioni %1$d</string>
+    <string name="catalog_demo_fallback">Të dhënat demo vendore</string>
+    <string name="catalog_counts" tools:ignore="PluralsCandidate">%1$d shoferë • %2$d autobusë • %3$d linja • %4$d ndalesa • %5$d tarifa</string>
+    <string name="catalog_offline_note">Katalogu i fundit ruhet në pajisje dhe përdoret edhe pa rrjet. Rifreskimi lejohet vetëm ndërmjet turneve.</string>
+    <string name="refresh_managed_catalog">Rifresko të dhënat nga serveri</string>
+    <string name="refreshing_catalog">Po rifreskohen të dhënat…</string>
     <string name="sync_service">Shërbimi i sinkronizimit</string>
     <string name="active_mode_demo">Mënyra aktive: validim demo</string>
     <string name="active_mode_local">Mënyra aktive: validim me server lokal</string>
@@ -222,6 +229,12 @@
     <string name="vm_ticket_printed">Bileta u printua me sukses</string>
     <string name="vm_print_failed">Printimi dështoi: %1$s</string>
     <string name="vm_loopback_debug_only">HTTP loopback është në dispozicion vetëm në versionin debug</string>
+    <string name="vm_catalog_requires_server">Aktivizoni serverin lokal ose HTTPS para rifreskimit të katalogut</string>
+    <string name="vm_catalog_loading">Po shkarkohet katalogu i menaxhuar…</string>
+    <string name="vm_catalog_failed">Rifreskimi i katalogut dështoi: %1$s</string>
+    <string name="vm_catalog_invalid">Katalogu nuk është i plotë dhe nuk u aplikua</string>
+    <string name="vm_catalog_refreshed" tools:ignore="PluralsCandidate">Katalogu revizion %1$d u ruajt dhe është gati për punë offline</string>
+    <string name="vm_catalog_refreshed_signed_out" tools:ignore="PluralsCandidate">Katalogu revizion %1$d u ruajt. Shoferi aktual nuk ekziston më dhe u çidentifikua.</string>
     <string name="bluetooth_printer">Printer Bluetooth</string>
     <string name="bluetooth_unavailable">Bluetooth-i nuk është në dispozicion</string>
     <string name="bluetooth_off">Bluetooth-i është i fikur</string>
