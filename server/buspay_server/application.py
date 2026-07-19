@@ -5,13 +5,20 @@ from __future__ import annotations
 import hmac
 import json
 from pathlib import Path
-from typing import Any, Callable, Dict, Iterable, Tuple
+from typing import Any, Callable, Dict, Iterable, Mapping, Tuple
 
 from .contract import CONTRACT_VERSION, ContractError, parse_catalog, parse_sync_batch
 from .database import SyncDatabase
 
 
 MAX_REQUEST_BYTES = 1_000_000
+ROLE_DEVICE_SYNC = "device_sync"
+ROLE_REPORT_READ = "report_read"
+ROLE_CATALOG_READ = "catalog_read"
+ROLE_CATALOG_WRITE = "catalog_write"
+ALL_ROLES = frozenset(
+    (ROLE_DEVICE_SYNC, ROLE_REPORT_READ, ROLE_CATALOG_READ, ROLE_CATALOG_WRITE)
+)
 WEB_ROOT = Path(__file__).with_name("web")
 ADMIN_ASSETS = {
     "/admin": ("admin.html", "text/html; charset=utf-8"),
@@ -23,11 +30,23 @@ StartResponse = Callable[[str, list], None]
 
 
 class BusPayApplication:
-    def __init__(self, database: SyncDatabase, bearer_token: str) -> None:
-        if not bearer_token or "\n" in bearer_token or "\r" in bearer_token:
-            raise ValueError("A valid server bearer token is required")
+    def __init__(
+        self,
+        database: SyncDatabase,
+        bearer_token: str | Mapping[str, str],
+    ) -> None:
         self.database = database
-        self.bearer_token = bearer_token
+        if isinstance(bearer_token, str):
+            role_tokens = {role: bearer_token for role in ALL_ROLES}
+        else:
+            role_tokens = dict(bearer_token)
+        if set(role_tokens) != ALL_ROLES:
+            raise ValueError("Every server access role requires a token")
+        if any(not token or "\n" in token or "\r" in token for token in role_tokens.values()):
+            raise ValueError("Every server access role requires a valid token")
+        self.role_tokens = {
+            role: token.encode("utf-8") for role, token in role_tokens.items()
+        }
 
     def __call__(self, environ: Dict[str, Any], start_response: StartResponse) -> Iterable[bytes]:
         try:
@@ -62,10 +81,23 @@ class BusPayApplication:
                     "database": "ready",
                 },
             )
+        if path == "/v1/access":
+            if method != "GET":
+                return self._method_not_allowed("GET")
+            principal, unauthorized = self._authorize(environ, ALL_ROLES)
+            if unauthorized is not None:
+                return unauthorized
+            return self._json_response(
+                200,
+                {
+                    "contractVersion": CONTRACT_VERSION,
+                    "roles": sorted(principal),
+                },
+            )
         if path == "/v1/sync":
             if method != "POST":
                 return self._method_not_allowed("POST")
-            unauthorized = self._authenticate(environ)
+            _, unauthorized = self._authorize(environ, {ROLE_DEVICE_SYNC})
             if unauthorized is not None:
                 return unauthorized
             payload = self._read_json(environ)
@@ -79,14 +111,19 @@ class BusPayApplication:
         if path == "/v1/reports/admin":
             if method != "GET":
                 return self._method_not_allowed("GET")
-            unauthorized = self._authenticate(environ)
+            _, unauthorized = self._authorize(environ, {ROLE_REPORT_READ})
             if unauthorized is not None:
                 return unauthorized
             return self._json_response(200, self.database.report())
         if path == "/v1/catalog":
             if method not in ("GET", "PUT"):
                 return self._method_not_allowed("GET, PUT")
-            unauthorized = self._authenticate(environ)
+            required_roles = (
+                {ROLE_CATALOG_READ, ROLE_CATALOG_WRITE}
+                if method == "GET"
+                else {ROLE_CATALOG_WRITE}
+            )
+            _, unauthorized = self._authorize(environ, required_roles)
             if unauthorized is not None:
                 return unauthorized
             if method == "GET":
@@ -98,21 +135,29 @@ class BusPayApplication:
             {"error": "Endpoint not found", "contractVersion": CONTRACT_VERSION},
         )
 
-    def _authenticate(self, environ: Dict[str, Any]):
+    def _authorize(self, environ: Dict[str, Any], allowed_roles):
         authorization = environ.get("HTTP_AUTHORIZATION", "")
         scheme, separator, supplied_token = authorization.partition(" ")
-        authenticated = (
-            separator == " "
+        supplied = supplied_token.encode("utf-8")
+        roles = frozenset(
+            role
+            for role, expected in self.role_tokens.items()
+            if separator == " "
             and scheme.lower() == "bearer"
-            and hmac.compare_digest(supplied_token.encode("utf-8"), self.bearer_token.encode("utf-8"))
+            and hmac.compare_digest(supplied, expected)
         )
-        if authenticated:
-            return None
-        return self._json_response(
-            401,
-            {"error": "Authentication required", "contractVersion": CONTRACT_VERSION},
-            [("WWW-Authenticate", 'Bearer realm="buspay-sync"')],
-        )
+        if not roles:
+            return None, self._json_response(
+                401,
+                {"error": "Authentication required", "contractVersion": CONTRACT_VERSION},
+                [("WWW-Authenticate", 'Bearer realm="buspay-sync"')],
+            )
+        if roles.isdisjoint(allowed_roles):
+            return roles, self._json_response(
+                403,
+                {"error": "Insufficient permission", "contractVersion": CONTRACT_VERSION},
+            )
+        return roles, None
 
     @staticmethod
     def _read_json(environ: Dict[str, Any]) -> Any:
@@ -147,6 +192,7 @@ class BusPayApplication:
             200: "OK",
             400: "Bad Request",
             401: "Unauthorized",
+            403: "Forbidden",
             404: "Not Found",
             405: "Method Not Allowed",
             409: "Conflict",

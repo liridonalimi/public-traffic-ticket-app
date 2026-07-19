@@ -27,9 +27,9 @@
   <main id="main-content">
     <section class="hero" aria-labelledby="page-title">
       <div>
-        <p class="eyebrow">Contract v1 reporting</p>
-        <h1 id="page-title">The network, reconciled.</h1>
-        <p class="hero-copy">Review synchronized shifts, ticket revenue, drivers, and fares from one operational view.</p>
+        <p class="eyebrow" id="hero-eyebrow">Protected operations</p>
+        <h1 id="page-title">The network, controlled.</h1>
+        <p class="hero-copy" id="hero-copy">Use a role-scoped credential to open the reporting or catalog workspace.</p>
       </div>
       <p class="generated-time" id="generated-time">Connect to load the latest report.</p>
     </section>
@@ -38,7 +38,7 @@
       <div>
         <p class="eyebrow">Protected access</p>
         <h2 id="auth-title">Connect to the reporting API</h2>
-        <p>Your bearer token is held only in this page's memory. It is never placed in the URL or browser storage.</p>
+        <p>Your report-reader or catalog-administrator token determines the available workspace. It is held only in page memory and never placed in the URL or browser storage.</p>
       </div>
       <form id="auth-form" class="auth-form">
         <label for="token-input">API access token</label>
@@ -53,18 +53,18 @@
     <div id="dashboard" hidden>
       <section class="toolbar" aria-label="Dashboard actions">
         <div>
-          <p class="eyebrow">Live reporting</p>
-          <h2>Operations overview</h2>
+          <p class="eyebrow" id="workspace-eyebrow">Authorized workspace</p>
+          <h2 id="workspace-title">Operations</h2>
         </div>
         <div class="toolbar-actions">
-          <button class="secondary-button" type="button" id="refresh-button">Refresh report</button>
+          <button class="secondary-button" type="button" id="refresh-button" data-requires="report_read">Refresh report</button>
           <button class="quiet-button" type="button" id="sign-out-button">Sign out</button>
         </div>
       </section>
 
       <p class="dashboard-status" id="dashboard-status" role="status" aria-live="polite"></p>
 
-      <section class="metric-grid" aria-label="Overall totals">
+      <section class="metric-grid" aria-label="Overall totals" data-requires="report_read">
         <article class="metric-card metric-card-accent">
           <p>Revenue</p>
           <strong id="metric-revenue">EUR 0.00</strong>
@@ -87,7 +87,7 @@
         </article>
       </section>
 
-      <section class="content-grid">
+      <section class="content-grid" data-requires="report_read">
         <article class="panel fare-panel" aria-labelledby="fare-title">
           <div class="panel-heading">
             <div>
@@ -114,7 +114,7 @@
         </article>
       </section>
 
-      <section class="panel catalog-panel" aria-labelledby="catalog-title">
+      <section class="panel catalog-panel" id="catalog-panel" aria-labelledby="catalog-title" data-requires="catalog_write">
         <div class="panel-heading catalog-heading">
           <div>
             <p class="eyebrow">Managed reference data</p>
@@ -188,7 +188,7 @@
         </div>
       </section>
 
-      <section class="panel shift-panel" aria-labelledby="shift-title">
+      <section class="panel shift-panel" aria-labelledby="shift-title" data-requires="report_read">
         <div class="panel-heading shift-heading">
           <div>
             <p class="eyebrow">Audit-ready detail</p>

@@ -46,6 +46,9 @@ class ManagedCatalogClient(
         if (response.statusCode == 401) {
             return CatalogRefreshResult.Failure("Catalog authentication was rejected")
         }
+        if (response.statusCode == 403) {
+            return CatalogRefreshResult.Failure("This credential cannot read the managed catalog")
+        }
         if (response.statusCode !in 200..299) {
             return CatalogRefreshResult.Failure("Catalog service returned HTTP ${response.statusCode}")
         }

@@ -3,11 +3,15 @@ services:
     image: ${BUSPAY_IMAGE:?Set BUSPAY_IMAGE to an immutable image digest}
     environment:
       BUSPAY_DB_PATH: /data/buspay.db
-      BUSPAY_SYNC_TOKEN_FILE: /run/secrets/buspay_sync_token
+      BUSPAY_DEVICE_TOKEN_FILE: /run/secrets/buspay_device_token
+      BUSPAY_REPORT_TOKEN_FILE: /run/secrets/buspay_report_token
+      BUSPAY_CATALOG_TOKEN_FILE: /run/secrets/buspay_catalog_token
       BUSPAY_WEB_WORKERS: ${BUSPAY_WEB_WORKERS:-2}
       BUSPAY_WEB_THREADS: ${BUSPAY_WEB_THREADS:-4}
     secrets:
-      - buspay_sync_token
+      - buspay_device_token
+      - buspay_report_token
+      - buspay_catalog_token
     volumes:
       - buspay-staging-data:/data
       - buspay-staging-backups:/backups
@@ -40,8 +44,12 @@ volumes:
   buspay-staging-backups:
 
 secrets:
-  buspay_sync_token:
-    file: ${BUSPAY_SYNC_TOKEN_FILE:?Set BUSPAY_SYNC_TOKEN_FILE to a protected secret file}
+  buspay_device_token:
+    file: ${BUSPAY_DEVICE_TOKEN_FILE:?Set BUSPAY_DEVICE_TOKEN_FILE to a protected device secret file}
+  buspay_report_token:
+    file: ${BUSPAY_REPORT_TOKEN_FILE:?Set BUSPAY_REPORT_TOKEN_FILE to a protected report secret file}
+  buspay_catalog_token:
+    file: ${BUSPAY_CATALOG_TOKEN_FILE:?Set BUSPAY_CATALOG_TOKEN_FILE to a protected catalog secret file}
 
 networks:
   edge:

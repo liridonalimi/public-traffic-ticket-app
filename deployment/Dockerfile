@@ -4,8 +4,7 @@ FROM ${PYTHON_IMAGE}
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PYTHONPATH=/opt/buspay/server \
-    BUSPAY_DB_PATH=/data/buspay.db \
-    BUSPAY_SYNC_TOKEN_FILE=/run/secrets/buspay_sync_token
+    BUSPAY_DB_PATH=/data/buspay.db
 
 RUN groupadd --gid 10001 buspay \
     && useradd --uid 10001 --gid 10001 --no-create-home --shell /usr/sbin/nologin buspay \

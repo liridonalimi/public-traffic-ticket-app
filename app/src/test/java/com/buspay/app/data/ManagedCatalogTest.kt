@@ -7,6 +7,7 @@ import com.buspay.app.domain.ManagedCatalog
 import com.buspay.app.domain.Route
 import com.buspay.app.domain.Stop
 import com.buspay.app.domain.isOperationallyValid
+import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -38,6 +39,23 @@ class ManagedCatalogTest {
             valid.copy(routes = valid.routes.map { it.copy(stops = emptyList()) })
                 .isOperationallyValid()
         )
+    }
+
+    @Test
+    fun `catalog refresh distinguishes authentication from missing permission`() = runBlocking {
+        fun client(statusCode: Int) = ManagedCatalogClient(
+            config = ProductionSyncConfig(
+                endpointUrl = "https://sync.example.test/v1/sync",
+                accessToken = "role-token"
+            ),
+            transport = SyncHttpTransport { SyncHttpResponse(statusCode, "{}") }
+        )
+
+        val unauthorized = client(401).fetch() as CatalogRefreshResult.Failure
+        val forbidden = client(403).fetch() as CatalogRefreshResult.Failure
+
+        assertTrue(unauthorized.message.contains("authentication was rejected"))
+        assertTrue(forbidden.message.contains("cannot read"))
     }
 
     private fun catalog() = ManagedCatalog(

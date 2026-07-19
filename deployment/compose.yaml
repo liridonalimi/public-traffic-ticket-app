@@ -5,11 +5,15 @@ services:
       dockerfile: deployment/Dockerfile
     environment:
       BUSPAY_DB_PATH: /data/buspay.db
-      BUSPAY_SYNC_TOKEN_FILE: /run/secrets/buspay_sync_token
+      BUSPAY_DEVICE_TOKEN_FILE: /run/secrets/buspay_device_token
+      BUSPAY_REPORT_TOKEN_FILE: /run/secrets/buspay_report_token
+      BUSPAY_CATALOG_TOKEN_FILE: /run/secrets/buspay_catalog_token
       BUSPAY_WEB_WORKERS: "2"
       BUSPAY_WEB_THREADS: "4"
     secrets:
-      - buspay_sync_token
+      - buspay_device_token
+      - buspay_report_token
+      - buspay_catalog_token
     volumes:
       - buspay-data:/data
       - buspay-backups:/backups
@@ -40,5 +44,9 @@ volumes:
   buspay-backups:
 
 secrets:
-  buspay_sync_token:
-    file: ./secrets/buspay_sync_token.txt
+  buspay_device_token:
+    file: ./secrets/buspay_device_token.txt
+  buspay_report_token:
+    file: ./secrets/buspay_report_token.txt
+  buspay_catalog_token:
+    file: ./secrets/buspay_catalog_token.txt

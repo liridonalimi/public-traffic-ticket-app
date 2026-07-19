@@ -43,7 +43,9 @@ Edit `/tmp/buspay-staging.env` and use:
 BUSPAY_STAGING_BASE_URL=https://staging.buspay.test
 BUSPAY_IMAGE=registry.buspay.test/sync@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 BUSPAY_EDGE_NETWORK=buspay-staging-edge
-BUSPAY_SYNC_TOKEN_FILE=/tmp/buspay-staging-token
+BUSPAY_DEVICE_TOKEN_FILE=/tmp/buspay-staging-device-token
+BUSPAY_REPORT_TOKEN_FILE=/tmp/buspay-staging-report-token
+BUSPAY_CATALOG_TOKEN_FILE=/tmp/buspay-staging-catalog-token
 BUSPAY_STAGING_REGION=eu-validation-1
 BUSPAY_OPERATIONS_OWNER=operations-team
 BUSPAY_SECURITY_OWNER=security-team
@@ -70,16 +72,15 @@ Expected: preflight prints `BusPay staging preflight: READY`; the rendered Compo
 The local-only flag is intentionally hidden and accepts HTTP only on loopback:
 
 ```bash
-cp deployment/secrets/buspay_sync_token.txt.example \
-  deployment/secrets/buspay_sync_token.txt
-printf '%s\n' 'module-16-local-smoke-token-2026' \
-  > deployment/secrets/buspay_sync_token.txt
+cp deployment/secrets/buspay_device_token.txt.example deployment/secrets/buspay_device_token.txt
+cp deployment/secrets/buspay_report_token.txt.example deployment/secrets/buspay_report_token.txt
+cp deployment/secrets/buspay_catalog_token.txt.example deployment/secrets/buspay_catalog_token.txt
 
 docker compose -f deployment/compose.yaml up --build -d
 
 PYTHONPATH=. python3 -m deployment.staging_smoke \
   --base-url http://127.0.0.1:8080 \
-  --token-file deployment/secrets/buspay_sync_token.txt \
+  --report-token-file deployment/secrets/buspay_report_token.txt \
   --allow-local-http
 ```
 
@@ -89,8 +90,8 @@ Clean up:
 
 ```bash
 docker compose -f deployment/compose.yaml down -v
-rm deployment/secrets/buspay_sync_token.txt
-rm /tmp/buspay-staging-token /tmp/buspay-staging.env
+rm deployment/secrets/buspay_device_token.txt deployment/secrets/buspay_report_token.txt deployment/secrets/buspay_catalog_token.txt
+rm /tmp/buspay-staging-device-token /tmp/buspay-staging-report-token /tmp/buspay-staging-catalog-token /tmp/buspay-staging.env
 ```
 
 ## Hosted staging activation

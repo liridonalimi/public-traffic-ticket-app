@@ -92,10 +92,17 @@ def run_smoke(
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--base-url", required=True)
-    parser.add_argument("--token-file", type=Path, required=True)
+    parser.add_argument(
+        "--report-token-file",
+        "--token-file",
+        dest="report_token_file",
+        type=Path,
+        required=True,
+        help="Path to the report-reader credential file",
+    )
     parser.add_argument("--allow-local-http", action="store_true", help=argparse.SUPPRESS)
     arguments = parser.parse_args()
-    token = arguments.token_file.read_text(encoding="utf-8").strip()
+    token = arguments.report_token_file.read_text(encoding="utf-8").strip()
     print(run_smoke(SmokeConfiguration(arguments.base_url.rstrip("/"), token, arguments.allow_local_http)))
 
 

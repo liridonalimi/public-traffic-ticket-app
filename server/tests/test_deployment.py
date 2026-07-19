@@ -61,6 +61,38 @@ class RuntimeConfigurationTest(unittest.TestCase):
             self.assertTrue(application.database.health())
             self.assertNotIn(b"file-secret", database.read_bytes())
 
+    def test_runtime_loads_distinct_role_secret_files(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            values = {"BUSPAY_DB_PATH": str(root / "buspay.db")}
+            for role in ("DEVICE", "REPORT", "CATALOG"):
+                secret = root / f"{role.lower()}.txt"
+                secret.write_text(f"distinct-{role.lower()}-token\n", encoding="utf-8")
+                values[f"BUSPAY_{role}_TOKEN_FILE"] = str(secret)
+
+            application = create_application(values)
+
+            self.assertTrue(application.database.health())
+            self.assertEqual(4, len(application.role_tokens))
+
+    def test_runtime_rejects_partial_or_reused_role_tokens(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            shared = root / "shared.txt"
+            shared.write_text("same-token", encoding="utf-8")
+            partial = {
+                "BUSPAY_DEVICE_TOKEN_FILE": str(shared),
+                "BUSPAY_REPORT_TOKEN_FILE": str(shared),
+            }
+            reused = {
+                **partial,
+                "BUSPAY_CATALOG_TOKEN_FILE": str(shared),
+            }
+
+            for values in (partial, reused):
+                with self.assertRaises(RuntimeConfigurationError):
+                    create_application(values)
+
     def test_runtime_rejects_ambiguous_missing_and_unreadable_secrets(self):
         invalid_values = (
             {},
@@ -136,7 +168,9 @@ class DeploymentAssetTest(unittest.TestCase):
             "no-new-privileges:true",
             "cap_drop:",
             "buspay-data:/data",
-            "/run/secrets/buspay_sync_token",
+            "/run/secrets/buspay_device_token",
+            "/run/secrets/buspay_report_token",
+            "/run/secrets/buspay_catalog_token",
             "healthcheck:",
         ):
             self.assertIn(required, compose)
@@ -146,13 +180,16 @@ class DeploymentAssetTest(unittest.TestCase):
             encoding="utf-8"
         )
         compose = (PROJECT_ROOT / "deployment/compose.yaml").read_text(encoding="utf-8")
+        gitignored = (PROJECT_ROOT / ".gitignore").read_text(encoding="utf-8")
         example_secret = (
             PROJECT_ROOT / "deployment/secrets/buspay_sync_token.txt.example"
         ).read_text(encoding="utf-8")
 
         self.assertIn("deployment/secrets/*.txt", ignored)
         self.assertNotIn("replace-with-a-long-random-secret", compose)
-        self.assertFalse((PROJECT_ROOT / "deployment/secrets/buspay_sync_token.txt").exists())
+        self.assertIn("deployment/secrets/*.txt", gitignored)
+        for name in ("device", "report", "catalog"):
+            self.assertNotIn(f"module-21-local-{name}-token", compose)
         self.assertEqual(64, len(hashlib.sha256(example_secret.encode("utf-8")).hexdigest()))
 
 

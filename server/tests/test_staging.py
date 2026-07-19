@@ -16,14 +16,22 @@ class StagingPreflightTest(unittest.TestCase):
     def setUp(self):
         self.temp_directory = tempfile.TemporaryDirectory()
         self.root = Path(self.temp_directory.name)
-        self.token_file = self.root / "token"
-        self.token_file.write_text("staging-token-with-at-least-32-characters\n", encoding="utf-8")
-        self.token_file.chmod(0o600)
+        self.token_files = {}
+        for role in ("device", "report", "catalog"):
+            token_file = self.root / f"{role}-token"
+            token_file.write_text(
+                f"staging-{role}-token-with-at-least-32-characters\n",
+                encoding="utf-8",
+            )
+            token_file.chmod(0o600)
+            self.token_files[role] = token_file
         self.values = {
             "BUSPAY_STAGING_BASE_URL": "https://staging.buspay.test",
             "BUSPAY_IMAGE": DIGEST_IMAGE,
             "BUSPAY_EDGE_NETWORK": "staging-edge",
-            "BUSPAY_SYNC_TOKEN_FILE": str(self.token_file),
+            "BUSPAY_DEVICE_TOKEN_FILE": str(self.token_files["device"]),
+            "BUSPAY_REPORT_TOKEN_FILE": str(self.token_files["report"]),
+            "BUSPAY_CATALOG_TOKEN_FILE": str(self.token_files["catalog"]),
             "BUSPAY_STAGING_REGION": "eu-test-1",
             "BUSPAY_OPERATIONS_OWNER": "operations-team",
             "BUSPAY_SECURITY_OWNER": "security-team",
@@ -56,12 +64,15 @@ class StagingPreflightTest(unittest.TestCase):
                     StagingConfiguration.from_values(values)
 
     def test_weak_or_permissive_secret_is_rejected(self):
-        self.token_file.write_text("too-short", encoding="utf-8")
+        self.token_files["device"].write_text("too-short", encoding="utf-8")
         with self.assertRaises(StagingPreflightError):
             StagingConfiguration.from_values(self.values)
 
-        self.token_file.write_text("staging-token-with-at-least-32-characters", encoding="utf-8")
-        self.token_file.chmod(0o644)
+        self.token_files["device"].write_text(
+            "staging-device-token-with-at-least-32-characters",
+            encoding="utf-8",
+        )
+        self.token_files["device"].chmod(0o644)
         with self.assertRaises(StagingPreflightError):
             StagingConfiguration.from_values(self.values)
 
@@ -99,7 +110,9 @@ class StagingAssetTest(unittest.TestCase):
         compose = (PROJECT_ROOT / "deployment/compose.staging.yaml").read_text(encoding="utf-8")
         for required in (
             "BUSPAY_IMAGE:?",
-            "BUSPAY_SYNC_TOKEN_FILE:?",
+            "BUSPAY_DEVICE_TOKEN_FILE:?",
+            "BUSPAY_REPORT_TOKEN_FILE:?",
+            "BUSPAY_CATALOG_TOKEN_FILE:?",
             "BUSPAY_EDGE_NETWORK:?",
             "external: true",
             'expose:',

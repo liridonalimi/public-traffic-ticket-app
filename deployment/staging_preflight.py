@@ -26,7 +26,9 @@ class StagingConfiguration:
     base_url: str
     image: str
     edge_network: str
-    token_file: Path
+    device_token_file: Path
+    report_token_file: Path
+    catalog_token_file: Path
     region: str
     operations_owner: str
     security_owner: str
@@ -69,22 +71,30 @@ class StagingConfiguration:
         if not IMAGE_DIGEST.fullmatch(image):
             raise StagingPreflightError("BUSPAY_IMAGE must be pinned by sha256 digest")
 
-        token_file = Path(required("BUSPAY_SYNC_TOKEN_FILE")).expanduser()
-        if not token_file.is_absolute() and relative_to is not None:
-            token_file = relative_to / token_file
-        try:
-            token_stat = token_file.stat()
-            token = token_file.read_text(encoding="utf-8").strip()
-        except OSError as error:
-            raise StagingPreflightError("BUSPAY_SYNC_TOKEN_FILE cannot be read") from error
-        if not stat.S_ISREG(token_stat.st_mode):
-            raise StagingPreflightError("BUSPAY_SYNC_TOKEN_FILE must be a regular file")
-        if token_stat.st_mode & (stat.S_IRWXG | stat.S_IRWXO):
-            raise StagingPreflightError("BUSPAY_SYNC_TOKEN_FILE must not allow group or other access")
-        if len(token) < MINIMUM_TOKEN_CHARACTERS or "\n" in token or "\r" in token:
-            raise StagingPreflightError(
-                f"BUSPAY_SYNC_TOKEN_FILE must contain at least {MINIMUM_TOKEN_CHARACTERS} characters on one line"
-            )
+        def protected_token(name: str) -> tuple[Path, str]:
+            token_file = Path(required(name)).expanduser()
+            if not token_file.is_absolute() and relative_to is not None:
+                token_file = relative_to / token_file
+            try:
+                token_stat = token_file.stat()
+                token = token_file.read_text(encoding="utf-8").strip()
+            except OSError as error:
+                raise StagingPreflightError(f"{name} cannot be read") from error
+            if not stat.S_ISREG(token_stat.st_mode):
+                raise StagingPreflightError(f"{name} must be a regular file")
+            if token_stat.st_mode & (stat.S_IRWXG | stat.S_IRWXO):
+                raise StagingPreflightError(f"{name} must not allow group or other access")
+            if len(token) < MINIMUM_TOKEN_CHARACTERS or "\n" in token or "\r" in token:
+                raise StagingPreflightError(
+                    f"{name} must contain at least {MINIMUM_TOKEN_CHARACTERS} characters on one line"
+                )
+            return token_file, token
+
+        device_token_file, device_token = protected_token("BUSPAY_DEVICE_TOKEN_FILE")
+        report_token_file, report_token = protected_token("BUSPAY_REPORT_TOKEN_FILE")
+        catalog_token_file, catalog_token = protected_token("BUSPAY_CATALOG_TOKEN_FILE")
+        if len({device_token, report_token, catalog_token}) != 3:
+            raise StagingPreflightError("Device, report, and catalog tokens must be distinct")
 
         raw_retention = required("BUSPAY_BACKUP_RETENTION_DAYS")
         try:
@@ -98,7 +108,9 @@ class StagingConfiguration:
             base_url=base_url.rstrip("/"),
             image=image,
             edge_network=required("BUSPAY_EDGE_NETWORK"),
-            token_file=token_file,
+            device_token_file=device_token_file,
+            report_token_file=report_token_file,
+            catalog_token_file=catalog_token_file,
             region=required("BUSPAY_STAGING_REGION"),
             operations_owner=required("BUSPAY_OPERATIONS_OWNER"),
             security_owner=required("BUSPAY_SECURITY_OWNER"),
@@ -118,7 +130,7 @@ class StagingConfiguration:
                 f"Security owner: {self.security_owner}",
                 f"Backup owner: {self.backup_owner}",
                 f"Backup retention: {self.backup_retention_days} days",
-                "Token: protected file validated (value not displayed)",
+                "Role tokens: 3 protected files validated (values not displayed)",
             )
         )
 

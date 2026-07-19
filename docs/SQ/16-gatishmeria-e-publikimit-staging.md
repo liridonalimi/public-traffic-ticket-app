@@ -49,16 +49,15 @@ Rezultati i pritur: `BusPay staging preflight: READY`; Compose ka vetëm `expose
 ### 3. Smoke test lokal
 
 ```bash
-cp deployment/secrets/buspay_sync_token.txt.example \
-  deployment/secrets/buspay_sync_token.txt
-printf '%s\n' 'module-16-local-smoke-token-2026' \
-  > deployment/secrets/buspay_sync_token.txt
+cp deployment/secrets/buspay_device_token.txt.example deployment/secrets/buspay_device_token.txt
+cp deployment/secrets/buspay_report_token.txt.example deployment/secrets/buspay_report_token.txt
+cp deployment/secrets/buspay_catalog_token.txt.example deployment/secrets/buspay_catalog_token.txt
 
 docker compose -f deployment/compose.yaml up --build -d
 
 PYTHONPATH=. python3 -m deployment.staging_smoke \
   --base-url http://127.0.0.1:8080 \
-  --token-file deployment/secrets/buspay_sync_token.txt \
+  --report-token-file deployment/secrets/buspay_report_token.txt \
   --allow-local-http
 ```
 
@@ -68,8 +67,8 @@ Pastrimi:
 
 ```bash
 docker compose -f deployment/compose.yaml down -v
-rm deployment/secrets/buspay_sync_token.txt
-rm /tmp/buspay-staging-token /tmp/buspay-staging.env
+rm deployment/secrets/buspay_device_token.txt deployment/secrets/buspay_report_token.txt deployment/secrets/buspay_catalog_token.txt
+rm /tmp/buspay-staging-device-token /tmp/buspay-staging-report-token /tmp/buspay-staging-catalog-token /tmp/buspay-staging.env
 ```
 
 ## Aktivizimi real staging

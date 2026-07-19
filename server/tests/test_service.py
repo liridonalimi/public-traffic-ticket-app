@@ -6,7 +6,13 @@ from pathlib import Path
 import tempfile
 import unittest
 
-from buspay_server.application import BusPayApplication
+from buspay_server.application import (
+    ROLE_CATALOG_READ,
+    ROLE_CATALOG_WRITE,
+    ROLE_DEVICE_SYNC,
+    ROLE_REPORT_READ,
+    BusPayApplication,
+)
 from buspay_server.contract import ContractError, parse_catalog, parse_sync_batch
 from buspay_server.database import SyncDatabase
 
@@ -271,6 +277,59 @@ class ApplicationTest(unittest.TestCase):
         self.assertEqual(401, missing)
         self.assertIn("Bearer", missing_headers["WWW-Authenticate"])
         self.assertEqual(401, wrong)
+
+    def test_role_tokens_are_least_privilege_and_access_is_discoverable(self):
+        self.application = BusPayApplication(
+            self.database,
+            {
+                ROLE_DEVICE_SYNC: "device-token",
+                ROLE_CATALOG_READ: "device-token",
+                ROLE_REPORT_READ: "report-token",
+                ROLE_CATALOG_WRITE: "catalog-token",
+            },
+        )
+
+        device_access, _, device_roles = self.request("GET", "/v1/access", token="device-token")
+        sync_status, _, _ = self.request(
+            "POST", "/v1/sync", batch_payload(), token="device-token"
+        )
+        device_catalog, _, _ = self.request("GET", "/v1/catalog", token="device-token")
+        device_report, _, _ = self.request("GET", "/v1/reports/admin", token="device-token")
+        device_write, _, _ = self.request(
+            "PUT", "/v1/catalog", catalog_payload(), token="device-token"
+        )
+
+        report_access, _, report_roles = self.request("GET", "/v1/access", token="report-token")
+        report_status, _, _ = self.request("GET", "/v1/reports/admin", token="report-token")
+        report_catalog, _, _ = self.request("GET", "/v1/catalog", token="report-token")
+        report_sync, _, _ = self.request(
+            "POST", "/v1/sync", batch_payload(), token="report-token"
+        )
+
+        catalog_access, _, catalog_roles = self.request("GET", "/v1/access", token="catalog-token")
+        catalog_read, _, current = self.request("GET", "/v1/catalog", token="catalog-token")
+        catalog_write, _, _ = self.request(
+            "PUT",
+            "/v1/catalog",
+            catalog_payload(current["revision"]),
+            token="catalog-token",
+        )
+        catalog_report, _, _ = self.request("GET", "/v1/reports/admin", token="catalog-token")
+        access_wrong_method, access_headers, _ = self.request(
+            "POST", "/v1/access", token="report-token"
+        )
+
+        self.assertEqual(200, device_access)
+        self.assertEqual([ROLE_CATALOG_READ, ROLE_DEVICE_SYNC], device_roles["roles"])
+        self.assertEqual((200, 200, 403, 403), (sync_status, device_catalog, device_report, device_write))
+        self.assertEqual(200, report_access)
+        self.assertEqual([ROLE_REPORT_READ], report_roles["roles"])
+        self.assertEqual((200, 403, 403), (report_status, report_catalog, report_sync))
+        self.assertEqual(200, catalog_access)
+        self.assertEqual([ROLE_CATALOG_WRITE], catalog_roles["roles"])
+        self.assertEqual((200, 200, 403), (catalog_read, catalog_write, catalog_report))
+        self.assertEqual(405, access_wrong_method)
+        self.assertEqual("GET", access_headers["Allow"])
 
     def test_catalog_requires_authentication_and_supports_versioned_replace(self):
         missing_status, _, _ = self.request("GET", "/v1/catalog")
