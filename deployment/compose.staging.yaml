@@ -6,12 +6,14 @@ services:
       BUSPAY_DEVICE_TOKEN_FILE: /run/secrets/buspay_device_token
       BUSPAY_REPORT_TOKEN_FILE: /run/secrets/buspay_report_token
       BUSPAY_CATALOG_TOKEN_FILE: /run/secrets/buspay_catalog_token
+      BUSPAY_AUDIT_TOKEN_FILE: /run/secrets/buspay_audit_token
       BUSPAY_WEB_WORKERS: ${BUSPAY_WEB_WORKERS:-2}
       BUSPAY_WEB_THREADS: ${BUSPAY_WEB_THREADS:-4}
     secrets:
       - buspay_device_token
       - buspay_report_token
       - buspay_catalog_token
+      - buspay_audit_token
     volumes:
       - buspay-staging-data:/data
       - buspay-staging-backups:/backups
@@ -50,6 +52,8 @@ secrets:
     file: ${BUSPAY_REPORT_TOKEN_FILE:?Set BUSPAY_REPORT_TOKEN_FILE to a protected report secret file}
   buspay_catalog_token:
     file: ${BUSPAY_CATALOG_TOKEN_FILE:?Set BUSPAY_CATALOG_TOKEN_FILE to a protected catalog secret file}
+  buspay_audit_token:
+    file: ${BUSPAY_AUDIT_TOKEN_FILE:?Set BUSPAY_AUDIT_TOKEN_FILE to a protected audit secret file}
 
 networks:
   edge:

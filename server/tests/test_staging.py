@@ -17,7 +17,7 @@ class StagingPreflightTest(unittest.TestCase):
         self.temp_directory = tempfile.TemporaryDirectory()
         self.root = Path(self.temp_directory.name)
         self.token_files = {}
-        for role in ("device", "report", "catalog"):
+        for role in ("device", "report", "catalog", "audit"):
             token_file = self.root / f"{role}-token"
             token_file.write_text(
                 f"staging-{role}-token-with-at-least-32-characters\n",
@@ -32,6 +32,7 @@ class StagingPreflightTest(unittest.TestCase):
             "BUSPAY_DEVICE_TOKEN_FILE": str(self.token_files["device"]),
             "BUSPAY_REPORT_TOKEN_FILE": str(self.token_files["report"]),
             "BUSPAY_CATALOG_TOKEN_FILE": str(self.token_files["catalog"]),
+            "BUSPAY_AUDIT_TOKEN_FILE": str(self.token_files["audit"]),
             "BUSPAY_STAGING_REGION": "eu-test-1",
             "BUSPAY_OPERATIONS_OWNER": "operations-team",
             "BUSPAY_SECURITY_OWNER": "security-team",
@@ -76,6 +77,21 @@ class StagingPreflightTest(unittest.TestCase):
         with self.assertRaises(StagingPreflightError):
             StagingConfiguration.from_values(self.values)
 
+    def test_two_token_rotation_bundle_is_accepted_but_duplicates_are_rejected(self):
+        self.token_files["device"].write_text(
+            "staging-device-old-token-with-at-least-32-characters\n"
+            "staging-device-new-token-with-at-least-32-characters\n",
+            encoding="utf-8",
+        )
+        configuration = StagingConfiguration.from_values(self.values)
+        self.assertEqual(self.token_files["device"], configuration.device_token_file)
+
+        self.token_files["audit"].write_text(
+            "staging-device-new-token-with-at-least-32-characters\n",
+            encoding="utf-8",
+        )
+        with self.assertRaises(StagingPreflightError):
+            StagingConfiguration.from_values(self.values)
 
 class StagingSmokeTest(unittest.TestCase):
     def test_smoke_checks_health_report_and_invalid_token(self):
@@ -104,6 +120,34 @@ class StagingSmokeTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             run_smoke(SmokeConfiguration("http://staging.buspay.test", "token"))
 
+    def test_smoke_checks_audit_contract_and_role_isolation(self):
+        def requester(url, token):
+            headers = {"Cache-Control": "no-store"}
+            if url.endswith("/health"):
+                return 200, headers, b'{"status":"ok","database":"ready","contractVersion":1}'
+            if url.endswith("/v1/audit?limit=25"):
+                if token == "audit-token":
+                    return 200, headers, b'{"contractVersion":1,"events":[]}'
+                return 403, headers, b'{"error":"Insufficient permission"}'
+            if url.endswith("/v1/reports/admin"):
+                if token == "report-token":
+                    return 200, headers, b'{"overall":{"driverCount":0,"shiftCount":0,"ticketCount":0,"cashTotalCents":0}}'
+                if token == "audit-token":
+                    return 403, headers, b'{"error":"Insufficient permission"}'
+                return 401, headers, b'{"error":"Authentication required"}'
+            raise AssertionError(url)
+
+        output = run_smoke(
+            SmokeConfiguration(
+                "https://staging.buspay.test",
+                "report-token",
+                audit_token="audit-token",
+            ),
+            requester,
+        )
+
+        self.assertIn("Audit role: isolated", output)
+
 
 class StagingAssetTest(unittest.TestCase):
     def test_staging_compose_uses_digest_secret_private_ingress_and_hardening(self):
@@ -113,6 +157,7 @@ class StagingAssetTest(unittest.TestCase):
             "BUSPAY_DEVICE_TOKEN_FILE:?",
             "BUSPAY_REPORT_TOKEN_FILE:?",
             "BUSPAY_CATALOG_TOKEN_FILE:?",
+            "BUSPAY_AUDIT_TOKEN_FILE:?",
             "BUSPAY_EDGE_NETWORK:?",
             "external: true",
             'expose:',

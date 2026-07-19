@@ -1,5 +1,7 @@
 # Module 21 — Role-scoped production access (technical)
 
+> Current runtime note: Module 22 extends this three-role-file foundation with a fourth `audit_read` secret and one/two-value rotation bundles. See the Module 22 technical document for the active deployment contract.
+
 ## Authorization model
 
 The runtime loads three distinct secret files and maps them to API capabilities:

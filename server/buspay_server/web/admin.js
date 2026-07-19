@@ -4,6 +4,8 @@ const elements = {
   authForm: document.querySelector("#auth-form"),
   authPanel: document.querySelector("#auth-panel"),
   authStatus: document.querySelector("#auth-status"),
+  auditStatus: document.querySelector("#audit-status"),
+  auditTableBody: document.querySelector("#audit-table-body"),
   catalogSummary: document.querySelector("#catalog-summary"),
   catalogStatus: document.querySelector("#catalog-status"),
   catalogDrivers: document.querySelector("#catalog-drivers"),
@@ -32,6 +34,7 @@ const elements = {
   metricTickets: document.querySelector("#metric-tickets"),
   pageTitle: document.querySelector("#page-title"),
   refreshButton: document.querySelector("#refresh-button"),
+  refreshAuditButton: document.querySelector("#refresh-audit-button"),
   shiftList: document.querySelector("#shift-list"),
   shiftResultCount: document.querySelector("#shift-result-count"),
   shiftSearch: document.querySelector("#shift-search"),
@@ -44,6 +47,7 @@ const elements = {
 let bearerToken = "";
 let currentReport = null;
 let currentCatalog = null;
+let currentAudit = null;
 let currentRoles = [];
 
 const money = new Intl.NumberFormat("en", { style: "currency", currency: "EUR" });
@@ -222,6 +226,53 @@ function renderReport(report) {
   replaceFilterOptions(elements.fareFilter, fares, "All fares", labelFare);
   renderShifts();
   elements.generatedTime.textContent = `Report generated ${formatTime(report.generatedAtMillis)}`;
+}
+
+function renderAudit(audit) {
+  currentAudit = audit;
+  elements.auditTableBody.replaceChildren();
+  (audit.events || []).forEach((event) => {
+    const row = document.createElement("tr");
+    const values = [
+      formatTime(event.occurredAtMillis),
+      event.outcome,
+      `${event.method} ${event.path}`,
+      (event.roles || []).join(", ") || "none",
+      event.source,
+    ];
+    values.forEach((value, index) => {
+      const cell = document.createElement("td");
+      cell.textContent = value;
+      if (index === 1) cell.className = `audit-outcome-${event.outcome}`;
+      row.append(cell);
+    });
+    elements.auditTableBody.append(row);
+  });
+  elements.auditStatus.textContent = `${(audit.events || []).length} authorization events loaded.`;
+}
+
+async function loadAudit() {
+  if (!bearerToken) return;
+  elements.refreshAuditButton.disabled = true;
+  elements.auditStatus.textContent = "Loading authorization events…";
+  try {
+    const response = await fetch("/v1/audit?limit=100", {
+      method: "GET",
+      cache: "no-store",
+      credentials: "omit",
+      headers: { Authorization: `Bearer ${bearerToken}` },
+    });
+    if (response.status === 401) throw new Error("The access token was rejected.");
+    if (response.status === 403) throw new Error("This token cannot read the authorization audit.");
+    if (!response.ok) throw new Error(`The audit service returned HTTP ${response.status}.`);
+    const audit = await response.json();
+    if (audit.contractVersion !== 1) throw new Error("Unsupported audit contract version.");
+    renderAudit(audit);
+  } catch (error) {
+    elements.auditStatus.textContent = error instanceof Error ? error.message : "Unable to load the authorization audit.";
+  } finally {
+    elements.refreshAuditButton.disabled = false;
+  }
 }
 
 function catalogRow(entity, record, primary, secondary) {
@@ -404,7 +455,8 @@ async function loadReport() {
     currentRoles = Array.isArray(access.roles) ? access.roles : [];
     const canReport = currentRoles.includes("report_read");
     const canManageCatalog = currentRoles.includes("catalog_write");
-    if (!canReport && !canManageCatalog) {
+    const canReadAudit = currentRoles.includes("audit_read");
+    if (!canReport && !canManageCatalog && !canReadAudit) {
       throw new Error("This token does not grant access to an administrative workspace.");
     }
     document.querySelectorAll("[data-requires]").forEach((node) => {
@@ -426,27 +478,37 @@ async function loadReport() {
       renderReport(report);
     }
     if (canManageCatalog) await loadCatalog();
+    if (canReadAudit) await loadAudit();
     elements.tokenInput.value = "";
     elements.authPanel.hidden = true;
     elements.dashboard.hidden = false;
-    elements.dashboardStatus.textContent = canManageCatalog
-      ? "Catalog administration authorized."
-      : "Read-only report authorized.";
+    elements.dashboardStatus.textContent = canReadAudit
+      ? "Security audit authorized."
+      : canManageCatalog
+        ? "Catalog administration authorized."
+        : "Read-only report authorized.";
     if (canReport) {
       elements.heroEyebrow.textContent = "Contract v1 reporting";
       elements.pageTitle.textContent = "The network, reconciled.";
       elements.heroCopy.textContent = "Review synchronized shifts, ticket revenue, drivers, and fares from one operational view.";
       elements.workspaceEyebrow.textContent = "Live reporting";
       elements.workspaceTitle.textContent = "Operations overview";
-    } else {
+    } else if (canManageCatalog) {
       elements.heroEyebrow.textContent = "Managed reference data";
       elements.pageTitle.textContent = "The network, configured.";
       elements.heroCopy.textContent = "Publish drivers, buses, routes, stops, and fares as one controlled revision.";
       elements.workspaceEyebrow.textContent = "Catalog administration";
       elements.workspaceTitle.textContent = "Managed operations data";
       elements.generatedTime.textContent = "Catalog administration session.";
+    } else {
+      elements.heroEyebrow.textContent = "Authorization accountability";
+      elements.pageTitle.textContent = "Access, accounted for.";
+      elements.heroCopy.textContent = "Review protected API access decisions without exposing credential values.";
+      elements.workspaceEyebrow.textContent = "Security audit";
+      elements.workspaceTitle.textContent = "Authorization events";
+      elements.generatedTime.textContent = "Security audit session.";
     }
-    setConnection("live", canManageCatalog ? "Catalog admin" : "Report reader");
+    setConnection("live", canReadAudit ? "Security auditor" : canManageCatalog ? "Catalog admin" : "Report reader");
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unable to load the report.";
     elements.authStatus.textContent = message;
@@ -463,14 +525,15 @@ function signOut(focus = true) {
   bearerToken = "";
   currentReport = null;
   currentCatalog = null;
+  currentAudit = null;
   currentRoles = [];
   elements.tokenInput.value = "";
   elements.dashboard.hidden = true;
   elements.authPanel.hidden = false;
   elements.heroEyebrow.textContent = "Protected operations";
   elements.pageTitle.textContent = "The network, controlled.";
-  elements.heroCopy.textContent = "Use a role-scoped credential to open the reporting or catalog workspace.";
-  elements.generatedTime.textContent = "Connect to load the latest report.";
+  elements.heroCopy.textContent = "Use a role-scoped credential to open reporting, catalog, or security audit.";
+  elements.generatedTime.textContent = "Connect to open an authorized workspace.";
   setConnection("locked", "Locked");
   if (focus) elements.tokenInput.focus();
 }
@@ -484,6 +547,7 @@ elements.authForm.addEventListener("submit", (event) => {
   loadReport();
 });
 elements.refreshButton.addEventListener("click", loadReport);
+elements.refreshAuditButton.addEventListener("click", loadAudit);
 elements.signOutButton.addEventListener("click", () => signOut());
 elements.reloadCatalogButton.addEventListener("click", () => {
   loadCatalog().catch((error) => {

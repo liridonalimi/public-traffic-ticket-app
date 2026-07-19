@@ -12,7 +12,7 @@ API-ja i tregon rolet e autentikuara përmes `GET /v1/access` dhe çdo leje kont
 
 ## Validimi lokal
 
-Krijoni tre skedarët sekretë të injoruar nga versionimi duke përdorur skedarët `.example`. Çdo vlerë duhet të jetë në një rresht dhe të jetë e ndryshme. Niseni shërbimin me:
+Krijoni skedarët sekretë të pajisjes, raportit, katalogut dhe auditimit të Modulit 22 duke përdorur skedarët `.example`, me vlera të ndryshme. Niseni shërbimin me:
 
 ```bash
 docker compose -f deployment/compose.yaml up --build -d
@@ -26,3 +26,5 @@ Në tablet konfiguroni `http://127.0.0.1:8080/v1/sync` me kredencialin e pajisje
 ## Kufiri i përfundimit
 
 Moduli krijon një bazë me privilegj minimal, të pavarur nga ofruesi. Federimi i identitetit, menaxhimi i përdoruesve, rotacioni i kredencialeve, domain/TLS dhe përgjegjësia e auditimit mbeten vendime të vendosjes pasi të zgjidhen infrastruktura dhe ofruesi i identitetit.
+
+Moduli 22 shton më pas rolin e katërt të auditorit të sigurisë dhe paketat e kufizuara me dy kredenciale. Përdorimi aktual i Compose kërkon edhe skedarin sekret të auditimit të dokumentuar në Modulin 22.

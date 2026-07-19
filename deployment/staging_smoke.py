@@ -17,6 +17,7 @@ class SmokeConfiguration:
     base_url: str
     token: str
     allow_local_http: bool = False
+    audit_token: str | None = None
 
     def validate(self) -> None:
         parsed = urlsplit(self.base_url)
@@ -28,6 +29,13 @@ class SmokeConfiguration:
             raise ValueError("Smoke-test URL must be an HTTPS origin")
         if not self.token or "\n" in self.token or "\r" in self.token:
             raise ValueError("A valid smoke-test token is required")
+        if self.audit_token is not None and (
+            not self.audit_token
+            or "\n" in self.audit_token
+            or "\r" in self.audit_token
+            or self.audit_token == self.token
+        ):
+            raise ValueError("A distinct valid audit smoke-test token is required")
 
 
 def _request(url: str, token: str | None = None) -> tuple[int, dict[str, str], bytes]:
@@ -78,6 +86,28 @@ def run_smoke(
     if rejected_status != 401:
         raise RuntimeError("Invalid-token check did not return HTTP 401")
 
+    audit_summary = ""
+    if configuration.audit_token is not None:
+        audit_status, audit_headers, audit_raw = requester(
+            f"{root}/v1/audit?limit=25", configuration.audit_token
+        )
+        if audit_status != 200:
+            raise RuntimeError(f"Authenticated audit failed with HTTP {audit_status}")
+        audit = json.loads(audit_raw)
+        if not isinstance(audit.get("events"), list):
+            raise RuntimeError("Authenticated audit does not match contract v1")
+        if audit_headers.get("Cache-Control", "").lower() != "no-store":
+            raise RuntimeError("Audit response is missing no-store cache protection")
+        report_denied_status, _, _ = requester(
+            f"{root}/v1/audit?limit=25", configuration.token
+        )
+        audit_denied_status, _, _ = requester(
+            f"{root}/v1/reports/admin", configuration.audit_token
+        )
+        if report_denied_status != 403 or audit_denied_status != 403:
+            raise RuntimeError("Report and audit roles are not isolated")
+        audit_summary = "\nAudit role: isolated"
+
     return (
         "BusPay staging smoke: PASS\n"
         f"Contract: {health.get('contractVersion')}\n"
@@ -85,7 +115,7 @@ def run_smoke(
         f"Closed shifts: {overall['shiftCount']}\n"
         f"Tickets: {overall['ticketCount']}\n"
         f"Cash cents: {overall['cashTotalCents']}\n"
-        "Invalid token: rejected"
+        f"Invalid token: rejected{audit_summary}"
     )
 
 
@@ -101,9 +131,35 @@ def main() -> None:
         help="Path to the report-reader credential file",
     )
     parser.add_argument("--allow-local-http", action="store_true", help=argparse.SUPPRESS)
+    parser.add_argument(
+        "--audit-token-file",
+        type=Path,
+        help="Optional path to the security-auditor credential file",
+    )
     arguments = parser.parse_args()
-    token = arguments.report_token_file.read_text(encoding="utf-8").strip()
-    print(run_smoke(SmokeConfiguration(arguments.base_url.rstrip("/"), token, arguments.allow_local_http)))
+
+    def first_token(path: Path) -> str:
+        return next(
+            (line.strip() for line in path.read_text(encoding="utf-8").splitlines() if line.strip()),
+            "",
+        )
+
+    token = first_token(arguments.report_token_file)
+    audit_token = (
+        first_token(arguments.audit_token_file)
+        if arguments.audit_token_file
+        else None
+    )
+    print(
+        run_smoke(
+            SmokeConfiguration(
+                arguments.base_url.rstrip("/"),
+                token,
+                arguments.allow_local_http,
+                audit_token,
+            )
+        )
+    )
 
 
 if __name__ == "__main__":

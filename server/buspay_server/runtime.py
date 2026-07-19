@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Mapping, Optional
 
 from .application import (
+    ROLE_AUDIT_READ,
     ROLE_CATALOG_READ,
     ROLE_CATALOG_WRITE,
     ROLE_DEVICE_SYNC,
@@ -33,11 +34,12 @@ def create_application(environ: Optional[Mapping[str, str]] = None) -> BusPayApp
     return BusPayApplication(SyncDatabase(database_path), credentials)
 
 
-def _load_role_tokens(environ: Mapping[str, str]) -> dict[str, str]:
+def _load_role_tokens(environ: Mapping[str, str]):
     role_file_names = {
         "device": "BUSPAY_DEVICE_TOKEN_FILE",
         "report": "BUSPAY_REPORT_TOKEN_FILE",
         "catalog": "BUSPAY_CATALOG_TOKEN_FILE",
+        "audit": "BUSPAY_AUDIT_TOKEN_FILE",
     }
     configured_role_files = {
         name: environ.get(variable, "").strip()
@@ -55,19 +57,21 @@ def _load_role_tokens(environ: Mapping[str, str]) -> dict[str, str]:
     if configured_role_files:
         if set(configured_role_files) != set(role_file_names):
             raise RuntimeConfigurationError(
-                "Device, report, and catalog token files must all be configured"
+                "Device, report, catalog, and audit token files must all be configured"
             )
         tokens = {
-            name: _load_token_file(Path(path), role_file_names[name])
+            name: _load_token_bundle(Path(path), role_file_names[name])
             for name, path in configured_role_files.items()
         }
-        if len(set(tokens.values())) != len(tokens):
+        flattened = [token for bundle in tokens.values() for token in bundle]
+        if len(set(flattened)) != len(flattened):
             raise RuntimeConfigurationError("Role tokens must be distinct")
         return {
             ROLE_DEVICE_SYNC: tokens["device"],
             ROLE_REPORT_READ: tokens["report"],
             ROLE_CATALOG_READ: tokens["device"],
             ROLE_CATALOG_WRITE: tokens["catalog"],
+            ROLE_AUDIT_READ: tokens["audit"],
         }
 
     legacy = _load_bearer_token(environ)
@@ -76,7 +80,23 @@ def _load_role_tokens(environ: Mapping[str, str]) -> dict[str, str]:
         ROLE_REPORT_READ: legacy,
         ROLE_CATALOG_READ: legacy,
         ROLE_CATALOG_WRITE: legacy,
+        ROLE_AUDIT_READ: legacy,
     }
+
+
+def _load_token_bundle(path: Path, variable_name: str) -> tuple[str, ...]:
+    try:
+        if path.stat().st_size > MAX_SECRET_BYTES:
+            raise RuntimeConfigurationError(f"{variable_name} is too large")
+        raw = path.read_text(encoding="utf-8")
+    except OSError as error:
+        raise RuntimeConfigurationError(f"{variable_name} cannot be read") from error
+    tokens = tuple(line.strip() for line in raw.splitlines() if line.strip())
+    if not 1 <= len(tokens) <= 2 or len(set(tokens)) != len(tokens):
+        raise RuntimeConfigurationError(
+            f"{variable_name} must contain one active token or two distinct rotation tokens"
+        )
+    return tokens
 
 
 def _load_token_file(path: Path, variable_name: str) -> str:

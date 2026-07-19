@@ -12,7 +12,7 @@ The API discovers the authenticated roles through `GET /v1/access` and enforces 
 
 ## Local validation
 
-Create the three ignored secret files from their `.example` counterparts, keep each value on one line, and ensure the values are different. Start the stack with:
+Create the device, report, catalog, and Module 22 audit secret files from their `.example` counterparts and ensure the values are different. Start the stack with:
 
 ```bash
 docker compose -f deployment/compose.yaml up --build -d
@@ -26,3 +26,5 @@ On the tablet, configure `http://127.0.0.1:8080/v1/sync` with the device credent
 ## Completion boundary
 
 The module provides a provider-neutral least-privilege foundation. External identity federation, user lifecycle management, credential rotation, domain/TLS activation, and audit ownership remain deployment decisions after an infrastructure and identity provider are selected.
+
+Module 22 subsequently adds a fourth security-auditor role and bounded two-credential rotation bundles. Current Compose usage therefore requires the audit secret file documented in Module 22.

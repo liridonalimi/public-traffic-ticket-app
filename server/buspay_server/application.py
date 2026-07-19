@@ -16,8 +16,9 @@ ROLE_DEVICE_SYNC = "device_sync"
 ROLE_REPORT_READ = "report_read"
 ROLE_CATALOG_READ = "catalog_read"
 ROLE_CATALOG_WRITE = "catalog_write"
+ROLE_AUDIT_READ = "audit_read"
 ALL_ROLES = frozenset(
-    (ROLE_DEVICE_SYNC, ROLE_REPORT_READ, ROLE_CATALOG_READ, ROLE_CATALOG_WRITE)
+    (ROLE_DEVICE_SYNC, ROLE_REPORT_READ, ROLE_CATALOG_READ, ROLE_CATALOG_WRITE, ROLE_AUDIT_READ)
 )
 WEB_ROOT = Path(__file__).with_name("web")
 ADMIN_ASSETS = {
@@ -33,7 +34,7 @@ class BusPayApplication:
     def __init__(
         self,
         database: SyncDatabase,
-        bearer_token: str | Mapping[str, str],
+        bearer_token: str | Mapping[str, str | Iterable[str]],
     ) -> None:
         self.database = database
         if isinstance(bearer_token, str):
@@ -42,11 +43,15 @@ class BusPayApplication:
             role_tokens = dict(bearer_token)
         if set(role_tokens) != ALL_ROLES:
             raise ValueError("Every server access role requires a token")
-        if any(not token or "\n" in token or "\r" in token for token in role_tokens.values()):
-            raise ValueError("Every server access role requires a valid token")
-        self.role_tokens = {
-            role: token.encode("utf-8") for role, token in role_tokens.items()
-        }
+        normalized = {}
+        for role, configured in role_tokens.items():
+            tokens = (configured,) if isinstance(configured, str) else tuple(configured)
+            if not 1 <= len(tokens) <= 2 or any(
+                not token or "\n" in token or "\r" in token for token in tokens
+            ):
+                raise ValueError("Every server access role requires one or two valid tokens")
+            normalized[role] = tuple(token.encode("utf-8") for token in tokens)
+        self.role_tokens = normalized
 
     def __call__(self, environ: Dict[str, Any], start_response: StartResponse) -> Iterable[bytes]:
         try:
@@ -115,6 +120,28 @@ class BusPayApplication:
             if unauthorized is not None:
                 return unauthorized
             return self._json_response(200, self.database.report())
+        if path == "/v1/audit":
+            if method != "GET":
+                return self._method_not_allowed("GET")
+            _, unauthorized = self._authorize(environ, {ROLE_AUDIT_READ})
+            if unauthorized is not None:
+                return unauthorized
+            query = environ.get("QUERY_STRING", "")
+            requested_limit = next(
+                (
+                    value
+                    for name, _, value in (part.partition("=") for part in query.split("&"))
+                    if name == "limit"
+                ),
+                "100",
+            )
+            try:
+                limit = int(requested_limit)
+            except ValueError:
+                raise ContractError("Audit limit must be an integer")
+            if not 1 <= limit <= 500:
+                raise ContractError("Audit limit must be between 1 and 500")
+            return self._json_response(200, self.database.authorization_audit(limit))
         if path == "/v1/catalog":
             if method not in ("GET", "PUT"):
                 return self._method_not_allowed("GET, PUT")
@@ -139,24 +166,34 @@ class BusPayApplication:
         authorization = environ.get("HTTP_AUTHORIZATION", "")
         scheme, separator, supplied_token = authorization.partition(" ")
         supplied = supplied_token.encode("utf-8")
-        roles = frozenset(
-            role
-            for role, expected in self.role_tokens.items()
-            if separator == " "
-            and scheme.lower() == "bearer"
-            and hmac.compare_digest(supplied, expected)
-        )
+        roles = frozenset()
+        if separator == " " and scheme.lower() == "bearer":
+            matches = {
+                role: [hmac.compare_digest(supplied, expected) for expected in expected_tokens]
+                for role, expected_tokens in self.role_tokens.items()
+            }
+            roles = frozenset(role for role, results in matches.items() if any(results))
+        method = environ.get("REQUEST_METHOD", "GET").upper()
+        path = environ.get("PATH_INFO", "/")
+        source = environ.get("REMOTE_ADDR", "unknown")
         if not roles:
+            self.database.record_authorization_event(
+                "unauthenticated", method, path, (), source
+            )
             return None, self._json_response(
                 401,
                 {"error": "Authentication required", "contractVersion": CONTRACT_VERSION},
                 [("WWW-Authenticate", 'Bearer realm="buspay-sync"')],
             )
         if roles.isdisjoint(allowed_roles):
+            self.database.record_authorization_event(
+                "forbidden", method, path, roles, source
+            )
             return roles, self._json_response(
                 403,
                 {"error": "Insufficient permission", "contractVersion": CONTRACT_VERSION},
             )
+        self.database.record_authorization_event("allowed", method, path, roles, source)
         return roles, None
 
     @staticmethod

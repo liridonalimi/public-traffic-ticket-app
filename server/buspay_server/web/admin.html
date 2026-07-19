@@ -29,16 +29,16 @@
       <div>
         <p class="eyebrow" id="hero-eyebrow">Protected operations</p>
         <h1 id="page-title">The network, controlled.</h1>
-        <p class="hero-copy" id="hero-copy">Use a role-scoped credential to open the reporting or catalog workspace.</p>
+        <p class="hero-copy" id="hero-copy">Use a role-scoped credential to open reporting, catalog, or security audit.</p>
       </div>
-      <p class="generated-time" id="generated-time">Connect to load the latest report.</p>
+      <p class="generated-time" id="generated-time">Connect to open an authorized workspace.</p>
     </section>
 
     <section class="auth-card" id="auth-panel" aria-labelledby="auth-title">
       <div>
         <p class="eyebrow">Protected access</p>
-        <h2 id="auth-title">Connect to the reporting API</h2>
-        <p>Your report-reader or catalog-administrator token determines the available workspace. It is held only in page memory and never placed in the URL or browser storage.</p>
+        <h2 id="auth-title">Connect to BusPay Control</h2>
+        <p>Your report-reader, catalog-administrator, or security-auditor token determines the available workspace. It is held only in page memory and never placed in the URL or browser storage.</p>
       </div>
       <form id="auth-form" class="auth-form">
         <label for="token-input">API access token</label>
@@ -58,6 +58,7 @@
         </div>
         <div class="toolbar-actions">
           <button class="secondary-button" type="button" id="refresh-button" data-requires="report_read">Refresh report</button>
+          <button class="secondary-button" type="button" id="refresh-audit-button" data-requires="audit_read">Refresh audit</button>
           <button class="quiet-button" type="button" id="sign-out-button">Sign out</button>
         </div>
       </section>
@@ -188,6 +189,23 @@
         </div>
       </section>
 
+      <section class="panel audit-panel" id="audit-panel" aria-labelledby="audit-title" data-requires="audit_read">
+        <div class="panel-heading">
+          <div>
+            <p class="eyebrow">Security accountability</p>
+            <h2 id="audit-title">Authorization audit</h2>
+            <p class="catalog-summary">Latest 100 protected API authorization decisions. Credential values are never recorded.</p>
+          </div>
+        </div>
+        <p class="dashboard-status" id="audit-status" role="status" aria-live="polite"></p>
+        <div class="table-scroll">
+          <table class="audit-table">
+            <thead><tr><th>Time</th><th>Outcome</th><th>Request</th><th>Roles</th><th>Source</th></tr></thead>
+            <tbody id="audit-table-body"></tbody>
+          </table>
+        </div>
+      </section>
+
       <section class="panel shift-panel" aria-labelledby="shift-title" data-requires="report_read">
         <div class="panel-heading shift-heading">
           <div>
@@ -221,7 +239,7 @@
 
   <footer>
     <span>BusPay Control</span>
-    <span>Reporting contract v1</span>
+    <span>Operations contract v1</span>
   </footer>
 </body>
 </html>

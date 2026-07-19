@@ -49,6 +49,8 @@ It currently includes:
 - authenticated web catalog editing with atomic publication and tablet offline refresh
 - least-privilege device-sync, report-reader, and catalog-administrator credentials
 - server-enforced role discovery with separate report, catalog-read, catalog-write, and sync permissions
+- two-credential overlap windows for controlled, zero-downtime role-token rotation
+- persistent authorization audit events and an isolated security-auditor web workspace
 - cash ticket count and cash total during an active shift
 - persistent local active shift storage
 - persistent local ticket storage for future sync
@@ -80,6 +82,7 @@ It currently includes:
 19. Printer simulation, receipt quality, and hardware certification - complete (physical-printer certification pending hardware)
 20. Centrally managed drivers, buses, routes, stops, and fares - complete
 21. Production access boundaries and role-scoped administration - complete
+22. Credential rotation and authorization auditability - complete
 
 ## Documentation
 
@@ -106,6 +109,7 @@ Presentation documentation:
 - English: `docs/EN/19-printer-simulation-and-certification.md`
 - English: `docs/EN/20-central-operations-catalog.md`
 - English: `docs/EN/21-role-scoped-production-access.md`
+- English: `docs/EN/22-credential-rotation-and-authorization-audit.md`
 - Albanian: `docs/SQ/01-themeli-i-projektit-dhe-skeleti-android.md`
 - Albanian: `docs/SQ/02-rrjedha-e-turnit-te-shoferit.md`
 - Albanian: `docs/SQ/03-ruajtja-lokale-e-biletave.md`
@@ -127,6 +131,7 @@ Presentation documentation:
 - Albanian: `docs/SQ/19-simulimi-i-printerit-dhe-certifikimi.md`
 - Albanian: `docs/SQ/20-katalogu-qendror-i-operacioneve.md`
 - Albanian: `docs/SQ/21-qasja-ne-prodhim-sipas-roleve.md`
+- Albanian: `docs/SQ/22-rotacioni-i-kredencialeve-dhe-auditimi-i-qasjes.md`
 
 Technical documentation:
 
@@ -151,13 +156,14 @@ Technical documentation:
 - `docs/TECHNICAL/19-printer-simulation-and-certification.md`
 - `docs/TECHNICAL/20-central-operations-catalog.md`
 - `docs/TECHNICAL/21-role-scoped-production-access.md`
+- `docs/TECHNICAL/22-credential-rotation-and-authorization-audit.md`
 
 ## Next build milestone
 
 Client-readiness continues with:
 
 1. Select hosting infrastructure and activate the already prepared staging release gate when a domain and accountable operator are available.
-2. Integrate the role boundary with the selected production identity provider and credential-rotation process.
+2. Integrate the role boundary and tested rotation protocol with the selected production identity provider.
 
 #######################################
 
@@ -212,6 +218,8 @@ Aktualisht përfshin:
 - redaktimin e autentikuar në web me publikim atomik dhe rifreskim offline në tablet
 - kredencialet me privilegj minimal për pajisjen, lexuesin e raportit dhe administratorin e katalogut
 - zbulimin e roleve dhe ndarjen në server të raportimit, leximit/shkrimit të katalogut dhe sinkronizimit
+- dritaren me dy kredenciale për rotacion të kontrolluar pa ndërprerje të shërbimit
+- ngjarjet e ruajtura të autorizimit dhe hapësirën e izoluar web për auditorin e sigurisë
 - numërimin e biletave me para të gatshme dhe totalin e arkës gjatë turnit aktiv
 - ruajtjen lokale të turnit aktiv
 - ruajtjen lokale të biletave për sinkronizim të ardhshëm
@@ -243,10 +251,11 @@ Aktualisht përfshin:
 19. Simulimi i printerit, cilësia e kuponit dhe certifikimi i pajisjes - përfunduar (certifikimi i printerit fizik pret pajisjen)
 20. Menaxhimi qendror i shoferëve, autobusëve, linjave, ndalesave dhe tarifave - përfunduar
 21. Kufijtë e qasjes në prodhim dhe administrimi sipas roleve - përfunduar
+22. Rotacioni i kredencialeve dhe auditimi i autorizimit - përfunduar
 
 ## Pika e ndërtimit tjetër
 
 Gatishmëria për klientin vazhdon me:
 
 1. Zgjidhni infrastrukturën dhe aktivizoni kontrollin staging tashmë të përgatitur kur të ketë domain dhe operator përgjegjës.
-2. Lidhni kufirin e roleve me ofruesin e zgjedhur të identitetit dhe procesin e rotacionit të kredencialeve.
+2. Lidhni kufirin e roleve dhe protokollin e testuar të rotacionit me ofruesin e zgjedhur të identitetit.

@@ -65,15 +65,19 @@ class RuntimeConfigurationTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             values = {"BUSPAY_DB_PATH": str(root / "buspay.db")}
-            for role in ("DEVICE", "REPORT", "CATALOG"):
+            for role in ("DEVICE", "REPORT", "CATALOG", "AUDIT"):
                 secret = root / f"{role.lower()}.txt"
-                secret.write_text(f"distinct-{role.lower()}-token\n", encoding="utf-8")
+                secret.write_text(
+                    f"distinct-{role.lower()}-token-old\ndistinct-{role.lower()}-token-new\n",
+                    encoding="utf-8",
+                )
                 values[f"BUSPAY_{role}_TOKEN_FILE"] = str(secret)
 
             application = create_application(values)
 
             self.assertTrue(application.database.health())
-            self.assertEqual(4, len(application.role_tokens))
+            self.assertEqual(5, len(application.role_tokens))
+            self.assertEqual(2, len(application.role_tokens["audit_read"]))
 
     def test_runtime_rejects_partial_or_reused_role_tokens(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -87,6 +91,7 @@ class RuntimeConfigurationTest(unittest.TestCase):
             reused = {
                 **partial,
                 "BUSPAY_CATALOG_TOKEN_FILE": str(shared),
+                "BUSPAY_AUDIT_TOKEN_FILE": str(shared),
             }
 
             for values in (partial, reused):
@@ -113,6 +118,9 @@ class BackupRestoreTest(unittest.TestCase):
         self.source_path = self.root / "source.db"
         self.database = SyncDatabase(str(self.source_path))
         self.database.ingest(parse_sync_batch(payload()))
+        self.database.record_authorization_event(
+            "allowed", "POST", "/v1/sync", ("device_sync",), "127.0.0.1"
+        )
 
     def tearDown(self):
         self.temp_directory.cleanup()
@@ -127,6 +135,10 @@ class BackupRestoreTest(unittest.TestCase):
         self.assertEqual(1, restored_report["overall"]["shiftCount"])
         self.assertEqual(1, restored_report["overall"]["ticketCount"])
         self.assertEqual(50, restored_report["overall"]["cashTotalCents"])
+        self.assertEqual(
+            "allowed",
+            SyncDatabase(str(restored_path)).authorization_audit(1)["events"][0]["outcome"],
+        )
 
     def test_restore_rejects_tampered_backup_and_existing_target(self):
         backup = create_backup(self.source_path, self.root / "backups")
@@ -171,6 +183,7 @@ class DeploymentAssetTest(unittest.TestCase):
             "/run/secrets/buspay_device_token",
             "/run/secrets/buspay_report_token",
             "/run/secrets/buspay_catalog_token",
+            "/run/secrets/buspay_audit_token",
             "healthcheck:",
         ):
             self.assertIn(required, compose)
@@ -188,7 +201,7 @@ class DeploymentAssetTest(unittest.TestCase):
         self.assertIn("deployment/secrets/*.txt", ignored)
         self.assertNotIn("replace-with-a-long-random-secret", compose)
         self.assertIn("deployment/secrets/*.txt", gitignored)
-        for name in ("device", "report", "catalog"):
+        for name in ("device", "report", "catalog", "audit"):
             self.assertNotIn(f"module-21-local-{name}-token", compose)
         self.assertEqual(64, len(hashlib.sha256(example_secret.encode("utf-8")).hexdigest()))
 

@@ -29,6 +29,7 @@ class StagingConfiguration:
     device_token_file: Path
     report_token_file: Path
     catalog_token_file: Path
+    audit_token_file: Path
     region: str
     operations_owner: str
     security_owner: str
@@ -71,30 +72,37 @@ class StagingConfiguration:
         if not IMAGE_DIGEST.fullmatch(image):
             raise StagingPreflightError("BUSPAY_IMAGE must be pinned by sha256 digest")
 
-        def protected_token(name: str) -> tuple[Path, str]:
+        def protected_token(name: str) -> tuple[Path, tuple[str, ...]]:
             token_file = Path(required(name)).expanduser()
             if not token_file.is_absolute() and relative_to is not None:
                 token_file = relative_to / token_file
             try:
                 token_stat = token_file.stat()
-                token = token_file.read_text(encoding="utf-8").strip()
+                raw_tokens = token_file.read_text(encoding="utf-8")
             except OSError as error:
                 raise StagingPreflightError(f"{name} cannot be read") from error
             if not stat.S_ISREG(token_stat.st_mode):
                 raise StagingPreflightError(f"{name} must be a regular file")
             if token_stat.st_mode & (stat.S_IRWXG | stat.S_IRWXO):
                 raise StagingPreflightError(f"{name} must not allow group or other access")
-            if len(token) < MINIMUM_TOKEN_CHARACTERS or "\n" in token or "\r" in token:
+            tokens = tuple(line.strip() for line in raw_tokens.splitlines() if line.strip())
+            if (
+                not 1 <= len(tokens) <= 2
+                or len(set(tokens)) != len(tokens)
+                or any(len(token) < MINIMUM_TOKEN_CHARACTERS for token in tokens)
+            ):
                 raise StagingPreflightError(
-                    f"{name} must contain at least {MINIMUM_TOKEN_CHARACTERS} characters on one line"
+                    f"{name} must contain one active token or two distinct rotation tokens, each at least {MINIMUM_TOKEN_CHARACTERS} characters"
                 )
-            return token_file, token
+            return token_file, tokens
 
         device_token_file, device_token = protected_token("BUSPAY_DEVICE_TOKEN_FILE")
         report_token_file, report_token = protected_token("BUSPAY_REPORT_TOKEN_FILE")
         catalog_token_file, catalog_token = protected_token("BUSPAY_CATALOG_TOKEN_FILE")
-        if len({device_token, report_token, catalog_token}) != 3:
-            raise StagingPreflightError("Device, report, and catalog tokens must be distinct")
+        audit_token_file, audit_token = protected_token("BUSPAY_AUDIT_TOKEN_FILE")
+        all_tokens = device_token + report_token + catalog_token + audit_token
+        if len(set(all_tokens)) != len(all_tokens):
+            raise StagingPreflightError("Device, report, catalog, and audit tokens must be distinct")
 
         raw_retention = required("BUSPAY_BACKUP_RETENTION_DAYS")
         try:
@@ -111,6 +119,7 @@ class StagingConfiguration:
             device_token_file=device_token_file,
             report_token_file=report_token_file,
             catalog_token_file=catalog_token_file,
+            audit_token_file=audit_token_file,
             region=required("BUSPAY_STAGING_REGION"),
             operations_owner=required("BUSPAY_OPERATIONS_OWNER"),
             security_owner=required("BUSPAY_SECURITY_OWNER"),
@@ -130,7 +139,7 @@ class StagingConfiguration:
                 f"Security owner: {self.security_owner}",
                 f"Backup owner: {self.backup_owner}",
                 f"Backup retention: {self.backup_retention_days} days",
-                "Role tokens: 3 protected files validated (values not displayed)",
+                "Role tokens: 4 protected files and rotation bundles validated (values not displayed)",
             )
         )
 

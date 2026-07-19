@@ -46,6 +46,7 @@ BUSPAY_EDGE_NETWORK=buspay-staging-edge
 BUSPAY_DEVICE_TOKEN_FILE=/tmp/buspay-staging-device-token
 BUSPAY_REPORT_TOKEN_FILE=/tmp/buspay-staging-report-token
 BUSPAY_CATALOG_TOKEN_FILE=/tmp/buspay-staging-catalog-token
+BUSPAY_AUDIT_TOKEN_FILE=/tmp/buspay-staging-audit-token
 BUSPAY_STAGING_REGION=eu-validation-1
 BUSPAY_OPERATIONS_OWNER=operations-team
 BUSPAY_SECURITY_OWNER=security-team
@@ -75,23 +76,25 @@ The local-only flag is intentionally hidden and accepts HTTP only on loopback:
 cp deployment/secrets/buspay_device_token.txt.example deployment/secrets/buspay_device_token.txt
 cp deployment/secrets/buspay_report_token.txt.example deployment/secrets/buspay_report_token.txt
 cp deployment/secrets/buspay_catalog_token.txt.example deployment/secrets/buspay_catalog_token.txt
+cp deployment/secrets/buspay_audit_token.txt.example deployment/secrets/buspay_audit_token.txt
 
 docker compose -f deployment/compose.yaml up --build -d
 
 PYTHONPATH=. python3 -m deployment.staging_smoke \
   --base-url http://127.0.0.1:8080 \
   --report-token-file deployment/secrets/buspay_report_token.txt \
+  --audit-token-file deployment/secrets/buspay_audit_token.txt \
   --allow-local-http
 ```
 
-Expected: `BusPay staging smoke: PASS`, report totals, and `Invalid token: rejected`.
+Expected: `BusPay staging smoke: PASS`, report totals, `Invalid token: rejected`, and `Audit role: isolated`.
 
 Clean up:
 
 ```bash
 docker compose -f deployment/compose.yaml down -v
-rm deployment/secrets/buspay_device_token.txt deployment/secrets/buspay_report_token.txt deployment/secrets/buspay_catalog_token.txt
-rm /tmp/buspay-staging-device-token /tmp/buspay-staging-report-token /tmp/buspay-staging-catalog-token /tmp/buspay-staging.env
+rm deployment/secrets/buspay_device_token.txt deployment/secrets/buspay_report_token.txt deployment/secrets/buspay_catalog_token.txt deployment/secrets/buspay_audit_token.txt
+rm /tmp/buspay-staging-device-token /tmp/buspay-staging-report-token /tmp/buspay-staging-catalog-token /tmp/buspay-staging-audit-token /tmp/buspay-staging.env
 ```
 
 ## Hosted staging activation

@@ -19,6 +19,9 @@ from .contract import (
 )
 
 
+MAX_AUTHORIZATION_EVENTS = 10_000
+
+
 class SyncDatabase:
     def __init__(self, path: str) -> None:
         self.path = path
@@ -117,6 +120,19 @@ class SyncDatabase:
 
                 CREATE INDEX IF NOT EXISTS idx_catalog_stops_route
                     ON catalog_stops(route_id, stop_order);
+
+                CREATE TABLE IF NOT EXISTS authorization_events (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    occurred_at_millis INTEGER NOT NULL,
+                    outcome TEXT NOT NULL CHECK(outcome IN ('allowed', 'forbidden', 'unauthenticated')),
+                    method TEXT NOT NULL,
+                    path TEXT NOT NULL,
+                    roles_json TEXT NOT NULL,
+                    source TEXT NOT NULL
+                );
+
+                CREATE INDEX IF NOT EXISTS idx_authorization_events_time
+                    ON authorization_events(occurred_at_millis DESC, id DESC);
                 """
             )
             self._seed_catalog_if_empty(connection)
@@ -129,6 +145,86 @@ class SyncDatabase:
         connection, should_close = self._connection()
         try:
             return connection.execute("SELECT 1").fetchone()[0] == 1
+        finally:
+            if should_close:
+                connection.close()
+
+    def record_authorization_event(
+        self,
+        outcome: str,
+        method: str,
+        path: str,
+        roles: Iterable[str],
+        source: str,
+    ) -> None:
+        if outcome not in ("allowed", "forbidden", "unauthenticated"):
+            raise ValueError("Unsupported authorization outcome")
+        connection, should_close = self._connection()
+        try:
+            cursor = connection.execute(
+                """
+                INSERT INTO authorization_events(
+                    occurred_at_millis, outcome, method, path, roles_json, source
+                ) VALUES (?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    int(time.time() * 1000),
+                    outcome,
+                    method[:16],
+                    path[:256],
+                    json.dumps(sorted(set(roles)), separators=(",", ":")),
+                    (source or "unknown")[:128],
+                ),
+            )
+            if cursor.lastrowid % 100 == 0:
+                connection.execute(
+                    """
+                    DELETE FROM authorization_events
+                    WHERE id < COALESCE(
+                        (
+                            SELECT id FROM authorization_events
+                            ORDER BY id DESC
+                            LIMIT 1 OFFSET ?
+                        ),
+                        0
+                    )
+                    """,
+                    (MAX_AUTHORIZATION_EVENTS - 1,),
+                )
+            connection.commit()
+        finally:
+            if should_close:
+                connection.close()
+
+    def authorization_audit(self, limit: int = 100) -> Dict[str, Any]:
+        safe_limit = max(1, min(int(limit), 500))
+        connection, should_close = self._connection()
+        try:
+            rows = connection.execute(
+                """
+                SELECT id, occurred_at_millis, outcome, method, path, roles_json, source
+                FROM authorization_events
+                ORDER BY occurred_at_millis DESC, id DESC
+                LIMIT ?
+                """,
+                (safe_limit,),
+            ).fetchall()
+            return {
+                "contractVersion": CONTRACT_VERSION,
+                "generatedAtMillis": int(time.time() * 1000),
+                "events": [
+                    {
+                        "eventId": row["id"],
+                        "occurredAtMillis": row["occurred_at_millis"],
+                        "outcome": row["outcome"],
+                        "method": row["method"],
+                        "path": row["path"],
+                        "roles": json.loads(row["roles_json"]),
+                        "source": row["source"],
+                    }
+                    for row in rows
+                ],
+            }
         finally:
             if should_close:
                 connection.close()

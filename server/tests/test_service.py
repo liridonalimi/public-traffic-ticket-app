@@ -6,7 +6,9 @@ from pathlib import Path
 import tempfile
 import unittest
 
+import buspay_server.database as database_module
 from buspay_server.application import (
+    ROLE_AUDIT_READ,
     ROLE_CATALOG_READ,
     ROLE_CATALOG_WRITE,
     ROLE_DEVICE_SYNC,
@@ -171,6 +173,36 @@ class DatabaseTest(unittest.TestCase):
         self.assertEqual(409, conflict.exception.status_code)
         self.assertEqual(replaced, self.database.catalog())
 
+    def test_authorization_audit_is_persistent_limited_and_contains_no_token(self):
+        self.database.record_authorization_event(
+            "allowed", "GET", "/v1/catalog", (ROLE_CATALOG_READ,), "127.0.0.1"
+        )
+        self.database.record_authorization_event(
+            "forbidden", "PUT", "/v1/catalog", (ROLE_CATALOG_READ,), "127.0.0.1"
+        )
+
+        audit = SyncDatabase(self.database_path).authorization_audit(limit=1)
+
+        self.assertEqual(1, len(audit["events"]))
+        self.assertEqual("forbidden", audit["events"][0]["outcome"])
+        self.assertEqual([ROLE_CATALOG_READ], audit["events"][0]["roles"])
+        self.assertNotIn("token", json.dumps(audit).lower())
+
+    def test_authorization_audit_retention_is_bounded(self):
+        original_limit = database_module.MAX_AUTHORIZATION_EVENTS
+        database_module.MAX_AUTHORIZATION_EVENTS = 3
+        try:
+            for index in range(100):
+                self.database.record_authorization_event(
+                    "allowed", "GET", f"/v1/test/{index}", (), "127.0.0.1"
+                )
+        finally:
+            database_module.MAX_AUTHORIZATION_EVENTS = original_limit
+
+        events = self.database.authorization_audit(500)["events"]
+        self.assertEqual(3, len(events))
+        self.assertEqual("/v1/test/99", events[0]["path"])
+
 
 class ApplicationTest(unittest.TestCase):
     def setUp(self):
@@ -209,9 +241,11 @@ class ApplicationTest(unittest.TestCase):
         idempotency_key=None,
     ):
         raw_body = b"" if payload is None else json.dumps(payload).encode("utf-8")
+        path_info, _, query_string = path.partition("?")
         environ = {
             "REQUEST_METHOD": method,
-            "PATH_INFO": path,
+            "PATH_INFO": path_info,
+            "QUERY_STRING": query_string,
             "CONTENT_TYPE": content_type,
             "CONTENT_LENGTH": str(len(raw_body)),
             "wsgi.input": BytesIO(raw_body),
@@ -286,6 +320,7 @@ class ApplicationTest(unittest.TestCase):
                 ROLE_CATALOG_READ: "device-token",
                 ROLE_REPORT_READ: "report-token",
                 ROLE_CATALOG_WRITE: "catalog-token",
+                ROLE_AUDIT_READ: ("audit-token-old", "audit-token-new"),
             },
         )
 
@@ -315,6 +350,15 @@ class ApplicationTest(unittest.TestCase):
             token="catalog-token",
         )
         catalog_report, _, _ = self.request("GET", "/v1/reports/admin", token="catalog-token")
+        audit_old, _, audit_payload = self.request("GET", "/v1/audit", token="audit-token-old")
+        audit_new, _, _ = self.request("GET", "/v1/audit", token="audit-token-new")
+        audit_report, _, _ = self.request("GET", "/v1/audit", token="report-token")
+        audit_limited, _, limited_payload = self.request(
+            "GET", "/v1/audit?limit=1", token="audit-token-new"
+        )
+        audit_bad_limit, _, _ = self.request(
+            "GET", "/v1/audit?limit=0", token="audit-token-new"
+        )
         access_wrong_method, access_headers, _ = self.request(
             "POST", "/v1/access", token="report-token"
         )
@@ -328,6 +372,11 @@ class ApplicationTest(unittest.TestCase):
         self.assertEqual(200, catalog_access)
         self.assertEqual([ROLE_CATALOG_WRITE], catalog_roles["roles"])
         self.assertEqual((200, 200, 403), (catalog_read, catalog_write, catalog_report))
+        self.assertEqual((200, 200, 403), (audit_old, audit_new, audit_report))
+        self.assertEqual((200, 400), (audit_limited, audit_bad_limit))
+        self.assertEqual(1, len(limited_payload["events"]))
+        self.assertGreater(len(audit_payload["events"]), 0)
+        self.assertTrue(all("token" not in json.dumps(event).lower() for event in audit_payload["events"]))
         self.assertEqual(405, access_wrong_method)
         self.assertEqual("GET", access_headers["Allow"])
 
