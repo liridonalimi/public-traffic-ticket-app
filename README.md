@@ -86,7 +86,7 @@ It currently includes:
 21. Production access boundaries and role-scoped administration - complete
 22. Credential rotation and authorization auditability - complete
 23. Shift cash reconciliation and handover - complete
-24. Scheduled trips and driver/vehicle assignments - planned
+24. Scheduled trips and driver/vehicle assignments - complete
 25. Fare policy engine for zones, time rules, and transfers - planned
 26. Controlled ticket voids, corrections, and reprints - planned
 27. Verifiable QR tickets and inspector validation - planned
@@ -126,6 +126,7 @@ Presentation documentation:
 - English: `docs/EN/21-role-scoped-production-access.md`
 - English: `docs/EN/22-credential-rotation-and-authorization-audit.md`
 - English: `docs/EN/23-shift-cash-reconciliation-and-handover.md`
+- English: `docs/EN/24-scheduled-trips-and-assignments.md`
 - English product roadmap: `docs/EN/PRODUCT_ROADMAP.md`
 - Albanian: `docs/SQ/01-themeli-i-projektit-dhe-skeleti-android.md`
 - Albanian: `docs/SQ/02-rrjedha-e-turnit-te-shoferit.md`
@@ -150,6 +151,7 @@ Presentation documentation:
 - Albanian: `docs/SQ/21-qasja-ne-prodhim-sipas-roleve.md`
 - Albanian: `docs/SQ/22-rotacioni-i-kredencialeve-dhe-auditimi-i-qasjes.md`
 - Albanian: `docs/SQ/23-rakordimi-dhe-dorezimi-i-arkes-se-turnit.md`
+- Albanian: `docs/SQ/24-udhetimet-e-planifikuara-dhe-caktimet.md`
 - Albanian product roadmap: `docs/SQ/UDHERREFYESI_I_PRODUKTIT.md`
 
 Technical documentation:
@@ -177,6 +179,7 @@ Technical documentation:
 - `docs/TECHNICAL/21-role-scoped-production-access.md`
 - `docs/TECHNICAL/22-credential-rotation-and-authorization-audit.md`
 - `docs/TECHNICAL/23-shift-cash-reconciliation-and-handover.md`
+- `docs/TECHNICAL/24-scheduled-trips-and-assignments.md`
 - Product roadmap: `docs/TECHNICAL/PRODUCT_ROADMAP.md`
 
 ## Product roadmap
@@ -273,7 +276,7 @@ Aktualisht përfshin:
 21. Kufijtë e qasjes në prodhim dhe administrimi sipas roleve - përfunduar
 22. Rotacioni i kredencialeve dhe auditimi i autorizimit - përfunduar
 23. Rakordimi dhe dorëzimi i arkës së turnit - përfunduar
-24. Udhëtimet e planifikuara dhe caktimi i shoferit/mjetit - planifikuar
+24. Udhëtimet e planifikuara dhe caktimi i shoferit/mjetit - gati për validim të pavarur
 25. Motori i politikave të tarifave për zona, kohë dhe transferta - planifikuar
 26. Anulimi, korrigjimi dhe riprintimi i kontrolluar i biletave - planifikuar
 27. Biletat QR të verifikueshme dhe validimi nga kontrollori - planifikuar

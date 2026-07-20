@@ -66,6 +66,7 @@ import com.buspay.app.domain.Bus
 import com.buspay.app.domain.AdminReport
 import com.buspay.app.domain.CashReconciliationStatus
 import com.buspay.app.domain.Driver
+import com.buspay.app.domain.DriverDuty
 import com.buspay.app.domain.FareType
 import com.buspay.app.domain.Route
 import com.buspay.app.domain.ReportingSyncStatus
@@ -257,11 +258,44 @@ fun DriverHomeScreen(viewModel: DriverShiftViewModel = viewModel()) {
 
                     Spacer(modifier = Modifier.height(16.dp))
 
+                    if (state.isDriverSignedIn) {
+                        Text(
+                            text = stringResource(R.string.scheduled_duties),
+                            fontWeight = FontWeight.Bold
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        if (state.duties.isEmpty()) {
+                            Text(
+                                text = stringResource(R.string.no_scheduled_duties),
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                        } else {
+                            SelectorCard(
+                                title = stringResource(R.string.assigned_trip),
+                                selectedText = state.selectedDuty?.let(::driverDutyText)
+                                    ?: stringResource(R.string.use_ad_hoc_shift),
+                                enabled = !state.isShiftActive,
+                                items = state.duties,
+                                itemText = ::driverDutyText,
+                                onItemSelected = viewModel::selectDuty
+                            )
+                            Spacer(modifier = Modifier.height(8.dp))
+                            OutlinedButton(
+                                onClick = { viewModel.selectDuty(null) },
+                                enabled = !state.isShiftActive && state.selectedDuty != null,
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Text(stringResource(R.string.use_ad_hoc_shift))
+                            }
+                        }
+                        Spacer(modifier = Modifier.height(16.dp))
+                    }
+
                     SelectorCard(
                         title = stringResource(R.string.bus),
                         selectedText = state.selectedBus?.plateNumber
                             ?: stringResource(R.string.select_bus),
-                        enabled = !state.isShiftActive,
+                        enabled = !state.isShiftActive && state.selectedDuty == null,
                         items = state.buses,
                         itemText = Bus::plateNumber,
                         onItemSelected = viewModel::selectBus
@@ -273,7 +307,7 @@ fun DriverHomeScreen(viewModel: DriverShiftViewModel = viewModel()) {
                         title = stringResource(R.string.route),
                         selectedText = state.selectedRoute?.name
                             ?: stringResource(R.string.select_route),
-                        enabled = !state.isShiftActive,
+                        enabled = !state.isShiftActive && state.selectedDuty == null,
                         items = state.routes,
                         itemText = Route::name,
                         onItemSelected = viewModel::selectRoute
@@ -1524,6 +1558,18 @@ private fun printerDisplayName(printer: PrinterDevice): String {
     } else {
         "${printer.name} (${printer.address})"
     }
+}
+
+private fun driverDutyText(duty: DriverDuty): String {
+    val hours = duty.trip.departureMinutes / 60
+    val minutes = duty.trip.departureMinutes % 60
+    return "%s · %02d:%02d · %s · %s".format(
+        duty.assignment.serviceDate,
+        hours,
+        minutes,
+        duty.route.name,
+        duty.bus.plateNumber
+    )
 }
 
 private fun openTicketPdf(context: Context, path: String) {

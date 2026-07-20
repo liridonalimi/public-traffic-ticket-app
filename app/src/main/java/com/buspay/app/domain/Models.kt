@@ -24,6 +24,49 @@ data class Stop(
     val order: Int
 )
 
+enum class TripDirection { OUTBOUND, INBOUND }
+
+data class ServiceCalendar(
+    val id: String,
+    val name: String,
+    val startDate: String,
+    val endDate: String,
+    val activeWeekdays: Set<Int>
+)
+
+data class ScheduledStopTime(
+    val stopId: String,
+    val arrivalMinutes: Int,
+    val departureMinutes: Int
+)
+
+data class ScheduledTrip(
+    val id: String,
+    val routeId: String,
+    val serviceCalendarId: String,
+    val departureMinutes: Int,
+    val direction: TripDirection,
+    val stopTimes: List<ScheduledStopTime>
+) {
+    val endMinutes: Int get() = stopTimes.maxOfOrNull(ScheduledStopTime::departureMinutes)
+        ?: departureMinutes
+}
+
+data class TripAssignment(
+    val id: String,
+    val tripId: String,
+    val serviceDate: String,
+    val driverId: String,
+    val busId: String
+)
+
+data class DriverDuty(
+    val assignment: TripAssignment,
+    val trip: ScheduledTrip,
+    val route: Route,
+    val bus: Bus
+)
+
 data class Shift(
     val id: String,
     val driverId: String,
@@ -34,7 +77,9 @@ data class Shift(
     val synced: Boolean = false,
     val expectedCashCents: Int? = null,
     val declaredCashCents: Int? = null,
-    val reconciledAtMillis: Long? = null
+    val reconciledAtMillis: Long? = null,
+    val scheduledTripId: String? = null,
+    val assignmentId: String? = null
 ) {
     val cashVarianceCents: Int? = expectedCashCents?.let { expected ->
         declaredCashCents?.minus(expected)
@@ -95,7 +140,10 @@ data class ManagedCatalog(
     val drivers: List<Driver>,
     val buses: List<Bus>,
     val routes: List<Route>,
-    val fareTypes: List<FareType>
+    val fareTypes: List<FareType>,
+    val serviceCalendars: List<ServiceCalendar> = emptyList(),
+    val scheduledTrips: List<ScheduledTrip> = emptyList(),
+    val tripAssignments: List<TripAssignment> = emptyList()
 )
 
 fun ManagedCatalog.isOperationallyValid(): Boolean {
@@ -119,7 +167,64 @@ fun ManagedCatalog.isOperationallyValid(): Boolean {
                 orders.all { it >= 1 } && orders.size == orders.toSet().size
             }
         } &&
-        fareTypes.all { it.priceCents >= 0 }
+        fareTypes.all { it.priceCents >= 0 } && isScheduleValid()
+}
+
+private fun ManagedCatalog.isScheduleValid(): Boolean {
+    if (listOf(
+            serviceCalendars.map(ServiceCalendar::id),
+            scheduledTrips.map(ScheduledTrip::id),
+            tripAssignments.map(TripAssignment::id)
+        ).any { it.size != it.toSet().size }
+    ) return false
+    val routeById = routes.associateBy(Route::id)
+    val calendars = serviceCalendars.associateBy(ServiceCalendar::id)
+    val trips = scheduledTrips.associateBy(ScheduledTrip::id)
+    if (serviceCalendars.any {
+            !it.startDate.matches(Regex("\\d{4}-\\d{2}-\\d{2}")) ||
+                !it.endDate.matches(Regex("\\d{4}-\\d{2}-\\d{2}")) ||
+                it.startDate > it.endDate || it.activeWeekdays.isEmpty() ||
+                it.activeWeekdays.any { day -> day !in 1..7 }
+        }
+    ) return false
+    if (scheduledTrips.any { trip ->
+            val route = routeById[trip.routeId]
+            route == null || trip.serviceCalendarId !in calendars || trip.departureMinutes !in 0..1439 ||
+                trip.stopTimes.map(ScheduledStopTime::stopId) != route.stops.sortedBy(Stop::order).map(Stop::id) ||
+                trip.stopTimes.any { it.arrivalMinutes !in 0..2879 || it.departureMinutes < it.arrivalMinutes } ||
+                trip.stopTimes.zipWithNext().any { (left, right) -> right.arrivalMinutes < left.departureMinutes }
+        }
+    ) return false
+    if (tripAssignments.any { assignment ->
+            val trip = trips[assignment.tripId]
+            val calendar = trip?.let { calendars[it.serviceCalendarId] }
+            trip == null || assignment.driverId !in drivers.map(Driver::id) ||
+                assignment.busId !in buses.map(Bus::id) || calendar == null ||
+                assignment.serviceDate < calendar.startDate || assignment.serviceDate > calendar.endDate
+        }
+    ) return false
+    return tripAssignments.groupBy(TripAssignment::serviceDate).values.all { assignments ->
+        assignments.indices.all { leftIndex -> assignments.indices.drop(leftIndex + 1).all { rightIndex ->
+            val left = assignments[leftIndex]
+            val right = assignments[rightIndex]
+            val leftTrip = requireNotNull(trips[left.tripId])
+            val rightTrip = requireNotNull(trips[right.tripId])
+            val overlaps = leftTrip.departureMinutes < rightTrip.endMinutes &&
+                rightTrip.departureMinutes < leftTrip.endMinutes
+            !overlaps || (left.driverId != right.driverId && left.busId != right.busId)
+        } }
+    }
+}
+
+fun ManagedCatalog.dutiesForDriver(driverId: String): List<DriverDuty> {
+    val trips = scheduledTrips.associateBy(ScheduledTrip::id)
+    val routesById = routes.associateBy(Route::id)
+    val busesById = buses.associateBy(Bus::id)
+    return tripAssignments.filter { it.driverId == driverId }.mapNotNull { assignment ->
+        val trip = trips[assignment.tripId] ?: return@mapNotNull null
+        DriverDuty(assignment, trip, routesById[trip.routeId] ?: return@mapNotNull null,
+            busesById[assignment.busId] ?: return@mapNotNull null)
+    }.sortedWith(compareBy({ it.assignment.serviceDate }, { it.trip.departureMinutes }, { it.assignment.id }))
 }
 
 enum class TicketPrintStatus {

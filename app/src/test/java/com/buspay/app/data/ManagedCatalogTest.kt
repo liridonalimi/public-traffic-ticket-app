@@ -5,7 +5,13 @@ import com.buspay.app.domain.Driver
 import com.buspay.app.domain.FareType
 import com.buspay.app.domain.ManagedCatalog
 import com.buspay.app.domain.Route
+import com.buspay.app.domain.ScheduledStopTime
+import com.buspay.app.domain.ScheduledTrip
+import com.buspay.app.domain.ServiceCalendar
 import com.buspay.app.domain.Stop
+import com.buspay.app.domain.TripAssignment
+import com.buspay.app.domain.TripDirection
+import com.buspay.app.domain.dutiesForDriver
 import com.buspay.app.domain.isOperationallyValid
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
@@ -56,6 +62,37 @@ class ManagedCatalogTest {
 
         assertTrue(unauthorized.message.contains("authentication was rejected"))
         assertTrue(forbidden.message.contains("cannot read"))
+    }
+
+    @Test
+    fun `scheduled duties resolve offline and reject driver or bus overlap`() {
+        val scheduled = catalog().copy(
+            serviceCalendars = listOf(
+                ServiceCalendar("daily", "Daily", "2026-01-01", "2030-12-31", setOf(1, 2, 3, 4, 5, 6, 7))
+            ),
+            scheduledTrips = listOf(
+                ScheduledTrip(
+                    "trip-1", "route-1", "daily", 480, TripDirection.OUTBOUND,
+                    listOf(ScheduledStopTime("stop-1", 480, 500))
+                ),
+                ScheduledTrip(
+                    "trip-2", "route-1", "daily", 490, TripDirection.INBOUND,
+                    listOf(ScheduledStopTime("stop-1", 490, 510))
+                )
+            ),
+            tripAssignments = listOf(
+                TripAssignment("assignment-1", "trip-1", "2026-07-20", "driver-1", "bus-1")
+            )
+        )
+
+        assertTrue(scheduled.isOperationallyValid())
+        assertEquals("assignment-1", scheduled.dutiesForDriver("driver-1").single().assignment.id)
+        assertFalse(
+            scheduled.copy(
+                tripAssignments = scheduled.tripAssignments +
+                    TripAssignment("assignment-2", "trip-2", "2026-07-20", "driver-1", "bus-1")
+            ).isOperationallyValid()
+        )
     }
 
     private fun catalog() = ManagedCatalog(

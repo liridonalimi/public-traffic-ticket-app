@@ -13,6 +13,9 @@ const elements = {
   catalogRoutes: document.querySelector("#catalog-routes"),
   catalogStops: document.querySelector("#catalog-stops"),
   catalogFares: document.querySelector("#catalog-fares"),
+  catalogServiceCalendars: document.querySelector("#catalog-service-calendars"),
+  catalogScheduledTrips: document.querySelector("#catalog-scheduled-trips"),
+  catalogTripAssignments: document.querySelector("#catalog-trip-assignments"),
   reloadCatalogButton: document.querySelector("#reload-catalog-button"),
   saveCatalogButton: document.querySelector("#save-catalog-button"),
   connectButton: document.querySelector("#connect-button"),
@@ -56,6 +59,7 @@ let currentRoles = [];
 
 const money = new Intl.NumberFormat("en", { style: "currency", currency: "EUR" });
 const timestamp = new Intl.DateTimeFormat("en", { dateStyle: "medium", timeStyle: "short" });
+const weekdayNames = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
 
 function formatMoney(cents) {
   return money.format((Number(cents) || 0) / 100);
@@ -204,6 +208,10 @@ function shiftCard(shift) {
   handover.textContent = shift.cashReconciliationStatus === "NOT_RECORDED"
     ? "Cash handover was not recorded for this legacy shift."
     : `Cash handover · expected ${formatMoney(shift.expectedCashCents)} · declared ${formatMoney(shift.declaredCashCents)} · variance ${formatSignedMoney(shift.cashVarianceCents)}`;
+  const schedule = document.createElement("p");
+  schedule.textContent = shift.assignmentId
+    ? `Scheduled operation · ${shift.assignmentId} · ${shift.scheduledTripId}`
+    : "Ad-hoc pilot operation";
   const grid = document.createElement("div");
   grid.className = "ticket-grid";
   (shift.tickets || []).forEach((ticket) => grid.append(ticketItem(ticket)));
@@ -212,7 +220,7 @@ function shiftCard(shift) {
     empty.textContent = "No tickets recorded for this shift.";
     grid.append(empty);
   }
-  body.append(heading, handover, grid);
+  body.append(heading, schedule, handover, grid);
   details.append(summary, body);
   return details;
 }
@@ -225,7 +233,7 @@ function renderShifts() {
   const shifts = (currentReport.shifts || []).filter((shift) => {
     const matchesDriver = !driver || shift.driverId === driver;
     const matchesFare = !fare || (shift.tickets || []).some((ticket) => ticket.fareTypeId === fare);
-    const searchable = [shift.shiftId, shift.driverId, shift.busId, shift.routeId].join(" ").toLowerCase();
+    const searchable = [shift.shiftId, shift.driverId, shift.busId, shift.routeId, shift.assignmentId, shift.scheduledTripId].join(" ").toLowerCase();
     return matchesDriver && matchesFare && (!search || searchable.includes(search));
   });
   elements.shiftList.replaceChildren(...shifts.map(shiftCard));
@@ -313,12 +321,18 @@ function catalogRow(entity, record, primary, secondary) {
 
 function renderCatalog() {
   if (!currentCatalog) return;
+  currentCatalog.serviceCalendars ||= [];
+  currentCatalog.scheduledTrips ||= [];
+  currentCatalog.tripAssignments ||= [];
   const counts = [
     `${currentCatalog.drivers.length} drivers`,
     `${currentCatalog.buses.length} buses`,
     `${currentCatalog.routes.length} routes`,
     `${currentCatalog.stops.length} stops`,
     `${currentCatalog.fares.length} fares`,
+    `${currentCatalog.serviceCalendars.length} calendars`,
+    `${currentCatalog.scheduledTrips.length} trips`,
+    `${currentCatalog.tripAssignments.length} assignments`,
   ];
   elements.catalogSummary.textContent = `Revision ${currentCatalog.revision} · ${counts.join(" · ")}`;
   elements.catalogDrivers.replaceChildren(...currentCatalog.drivers.map((record) =>
@@ -346,12 +360,163 @@ function renderCatalog() {
       `${record.id}${record.eligibility ? ` · ${record.eligibility}` : ""}`
     )
   ));
+  elements.catalogServiceCalendars.replaceChildren(...currentCatalog.serviceCalendars.map((record) =>
+    catalogRow("serviceCalendars", record, record.name, `${record.startDate}–${record.endDate} · ${weekdayListLabel(record.activeWeekdays)}`)
+  ));
+  elements.catalogScheduledTrips.replaceChildren(...currentCatalog.scheduledTrips.map((record) =>
+    catalogRow(
+      "scheduledTrips",
+      record,
+      scheduledTripLabel(record, false),
+      `${record.id} · ${calendarName(record.serviceCalendarId)}`
+    )
+  ));
+  elements.catalogTripAssignments.replaceChildren(...currentCatalog.tripAssignments.map((record) =>
+    catalogRow(
+      "tripAssignments",
+      record,
+      `${record.serviceDate} · ${scheduledTripLabel(currentCatalog.scheduledTrips.find((trip) => trip.id === record.tripId), false)}`,
+      `${driverName(record.driverId)} · ${busName(record.busId)} · ${record.id}`
+    )
+  ));
 
   document.querySelectorAll('form[data-entity="stops"] select[name="routeId"]').forEach((select) => {
     const selected = select.value;
     select.replaceChildren(option("", "Select route"));
     currentCatalog.routes.forEach((route) => select.append(option(route.id, route.name)));
     if (currentCatalog.routes.some((route) => route.id === selected)) select.value = selected;
+  });
+  replaceCatalogSelect('form[data-entity="scheduledTrips"] select[name="routeId"]', currentCatalog.routes, "Select route", (record) => record.name);
+  replaceCatalogSelect('form[data-entity="scheduledTrips"] select[name="serviceCalendarId"]', currentCatalog.serviceCalendars, "Select calendar", (record) => record.name);
+  replaceCatalogSelect('form[data-entity="tripAssignments"] select[name="tripId"]', currentCatalog.scheduledTrips, "Select trip", (record) => scheduledTripLabel(record, true));
+  replaceCatalogSelect('form[data-entity="tripAssignments"] select[name="driverId"]', currentCatalog.drivers, "Select driver", (record) => record.name);
+  replaceCatalogSelect('form[data-entity="tripAssignments"] select[name="busId"]', currentCatalog.buses, "Select bus", (record) => record.plateNumber);
+  renderScheduledStopTimeFields();
+}
+
+function minutesLabel(value) {
+  const minutes = Number(value) || 0;
+  const clockMinutes = ((minutes % 1440) + 1440) % 1440;
+  const clock = `${String(Math.floor(clockMinutes / 60)).padStart(2, "0")}:${String(clockMinutes % 60).padStart(2, "0")}`;
+  return minutes >= 1440 ? `${clock} (+1 day)` : clock;
+}
+
+function minutesToTimeValue(value) {
+  const minutes = ((Number(value) % 1440) + 1440) % 1440;
+  return `${String(Math.floor(minutes / 60)).padStart(2, "0")}:${String(minutes % 60).padStart(2, "0")}`;
+}
+
+function timeValueToMinutes(value) {
+  const match = /^(\d{2}):(\d{2})$/.exec(String(value || ""));
+  if (!match) throw new Error("Choose a valid time.");
+  const hours = Number(match[1]);
+  const minutes = Number(match[2]);
+  if (hours > 23 || minutes > 59) throw new Error("Choose a valid time.");
+  return (hours * 60) + minutes;
+}
+
+function weekdayListLabel(values) {
+  const days = [...new Set((values || []).map(Number))].sort((left, right) => left - right);
+  if (days.join(",") === "1,2,3,4,5") return "Monday–Friday";
+  if (days.join(",") === "6,7") return "Saturday–Sunday";
+  return days.map((day) => weekdayNames[day - 1] || `Day ${day}`).join(", ");
+}
+
+function routeName(id) {
+  return currentCatalog?.routes.find((record) => record.id === id)?.name || id || "Unknown route";
+}
+
+function calendarName(id) {
+  return currentCatalog?.serviceCalendars.find((record) => record.id === id)?.name || id || "Unknown calendar";
+}
+
+function driverName(id) {
+  return currentCatalog?.drivers.find((record) => record.id === id)?.name || id || "Unknown driver";
+}
+
+function busName(id) {
+  return currentCatalog?.buses.find((record) => record.id === id)?.plateNumber || id || "Unknown bus";
+}
+
+function scheduledTripLabel(record, includeId) {
+  if (!record) return "Unknown trip";
+  const finalStop = (record.stopTimes || []).at(-1);
+  const endMinutes = finalStop?.departureMinutes ?? finalStop?.arrivalMinutes;
+  const timeRange = Number.isInteger(Number(endMinutes))
+    ? `${minutesLabel(record.departureMinutes)}–${minutesLabel(endMinutes)}`
+    : minutesLabel(record.departureMinutes);
+  const direction = String(record.direction || "").toLowerCase();
+  const base = `${timeRange} · ${routeName(record.routeId)} · ${direction}`;
+  return includeId ? `${base} · ${record.id}` : base;
+}
+
+function renderScheduledStopTimeFields() {
+  const form = document.querySelector('form[data-entity="scheduledTrips"]');
+  if (!(form instanceof HTMLFormElement) || !currentCatalog) return;
+  const routeSelect = form.querySelector('select[name="routeId"]');
+  const departureInput = form.querySelector('input[name="departureTime"]');
+  const fieldContainer = form.querySelector("[data-stop-time-fields]");
+  const hint = form.querySelector(".stop-time-hint");
+  if (!(routeSelect instanceof HTMLSelectElement) || !(fieldContainer instanceof HTMLElement)) return;
+
+  const routeStops = [...currentCatalog.stops]
+    .filter((stop) => stop.routeId === routeSelect.value)
+    .sort((left, right) => left.order - right.order);
+  fieldContainer.replaceChildren();
+  if (!routeStops.length) {
+    if (hint) hint.textContent = routeSelect.value
+      ? "This route has no stops yet. Add its stops before scheduling a trip."
+      : "Choose a route to create one normal time field for every stop.";
+    return;
+  }
+
+  let departure = 480;
+  try {
+    departure = timeValueToMinutes(departureInput?.value || "08:00");
+  } catch (_) {
+    departure = 480;
+  }
+  if (departureInput instanceof HTMLInputElement && !departureInput.value) {
+    departureInput.value = minutesToTimeValue(departure);
+  }
+  if (hint) hint.textContent = `${routeName(routeSelect.value)} has ${routeStops.length} stops. Confirm each time in route order.`;
+
+  routeStops.forEach((stop, index) => {
+    const minutes = departure + (index * 10);
+    const field = document.createElement("div");
+    field.className = "stop-time-field";
+    const timeLabel = document.createElement("label");
+    const title = document.createElement("span");
+    title.textContent = `${index + 1}. ${stop.name}`;
+    const time = document.createElement("input");
+    time.type = "time";
+    time.step = "60";
+    time.required = true;
+    time.value = minutesToTimeValue(minutes);
+    time.dataset.stopTime = "true";
+    time.dataset.stopId = stop.id;
+    timeLabel.append(title, time);
+
+    const nextDay = document.createElement("label");
+    nextDay.className = "next-day-toggle";
+    const checkbox = document.createElement("input");
+    checkbox.type = "checkbox";
+    checkbox.dataset.nextDay = "true";
+    checkbox.checked = minutes >= 1440;
+    const nextDayText = document.createElement("span");
+    nextDayText.textContent = "Next day";
+    nextDay.append(checkbox, nextDayText);
+    field.append(timeLabel, nextDay);
+    fieldContainer.append(field);
+  });
+}
+
+function replaceCatalogSelect(selector, records, firstLabel, formatter) {
+  document.querySelectorAll(selector).forEach((select) => {
+    const selected = select.value;
+    select.replaceChildren(option("", firstLabel));
+    records.forEach((record) => select.append(option(record.id, formatter(record))));
+    if (records.some((record) => record.id === selected)) select.value = selected;
   });
 }
 
@@ -360,13 +525,25 @@ function removeCatalogRecord(entity, id) {
   currentCatalog[entity] = currentCatalog[entity].filter((record) => record.id !== id);
   if (entity === "routes") {
     currentCatalog.stops = currentCatalog.stops.filter((stop) => stop.routeId !== id);
+    const tripIds = currentCatalog.scheduledTrips.filter((trip) => trip.routeId === id).map((trip) => trip.id);
+    currentCatalog.scheduledTrips = currentCatalog.scheduledTrips.filter((trip) => trip.routeId !== id);
+    currentCatalog.tripAssignments = currentCatalog.tripAssignments.filter((assignment) => !tripIds.includes(assignment.tripId));
   }
+  if (entity === "drivers") currentCatalog.tripAssignments = currentCatalog.tripAssignments.filter((record) => record.driverId !== id);
+  if (entity === "buses") currentCatalog.tripAssignments = currentCatalog.tripAssignments.filter((record) => record.busId !== id);
+  if (entity === "serviceCalendars") {
+    const tripIds = currentCatalog.scheduledTrips.filter((trip) => trip.serviceCalendarId === id).map((trip) => trip.id);
+    currentCatalog.scheduledTrips = currentCatalog.scheduledTrips.filter((trip) => trip.serviceCalendarId !== id);
+    currentCatalog.tripAssignments = currentCatalog.tripAssignments.filter((assignment) => !tripIds.includes(assignment.tripId));
+  }
+  if (entity === "scheduledTrips") currentCatalog.tripAssignments = currentCatalog.tripAssignments.filter((record) => record.tripId !== id);
   elements.catalogStatus.textContent = "Draft changed. Publish to make it available to tablets.";
   renderCatalog();
 }
 
 function catalogRecordFromForm(entity, form) {
-  const values = Object.fromEntries(new FormData(form).entries());
+  const formData = new FormData(form);
+  const values = Object.fromEntries(formData.entries());
   const trimmed = Object.fromEntries(
     Object.entries(values).map(([key, value]) => [key, String(value).trim()])
   );
@@ -385,7 +562,59 @@ function catalogRecordFromForm(entity, form) {
       eligibility: trimmed.eligibility || null,
     };
   }
+  if (entity === "serviceCalendars") {
+    const activeWeekdays = formData.getAll("activeWeekdays").map((value) => Number(value));
+    if (!activeWeekdays.length) throw new Error("Select at least one service day.");
+    return {
+      id: trimmed.id,
+      name: trimmed.name,
+      startDate: trimmed.startDate,
+      endDate: trimmed.endDate,
+      activeWeekdays,
+    };
+  }
+  if (entity === "scheduledTrips") {
+    const routeStops = [...currentCatalog.stops]
+      .filter((stop) => stop.routeId === trimmed.routeId)
+      .sort((left, right) => left.order - right.order);
+    const departureMinutes = timeValueToMinutes(trimmed.departureTime);
+    const timeInputs = [...form.querySelectorAll("input[data-stop-time]")];
+    if (timeInputs.length !== routeStops.length) throw new Error("Choose the route again so its stop-time fields can be created.");
+    const minutes = timeInputs.map((input) => {
+      const nextDay = input.closest(".stop-time-field")?.querySelector("input[data-next-day]")?.checked;
+      return timeValueToMinutes(input.value) + (nextDay ? 1440 : 0);
+    });
+    if (minutes[0] < departureMinutes) throw new Error("The first stop time cannot be earlier than the trip departure time.");
+    if (minutes.some((value, index) => index > 0 && value < minutes[index - 1])) {
+      throw new Error("Stop times must stay in chronological route order.");
+    }
+    return {
+      id: trimmed.id,
+      routeId: trimmed.routeId,
+      serviceCalendarId: trimmed.serviceCalendarId,
+      departureMinutes,
+      direction: trimmed.direction,
+      stopTimes: routeStops.map((stop, index) => ({
+        stopId: stop.id,
+        arrivalMinutes: minutes[index],
+        departureMinutes: minutes[index],
+      })),
+    };
+  }
   return trimmed;
+}
+
+function setCatalogFormStatus(form, message, isError = false) {
+  let status = form.nextElementSibling;
+  if (!(status instanceof HTMLElement) || !status.classList.contains("catalog-form-status")) {
+    status = document.createElement("p");
+    status.className = "catalog-form-status";
+    status.setAttribute("role", "status");
+    status.setAttribute("aria-live", "polite");
+    form.insertAdjacentElement("afterend", status);
+  }
+  status.textContent = message;
+  status.classList.toggle("is-error", isError);
 }
 
 function updateCatalogDraft(entity, record) {
@@ -441,6 +670,9 @@ async function saveCatalog() {
         routes: currentCatalog.routes,
         stops: currentCatalog.stops,
         fares: currentCatalog.fares,
+        serviceCalendars: currentCatalog.serviceCalendars,
+        scheduledTrips: currentCatalog.scheduledTrips,
+        tripAssignments: currentCatalog.tripAssignments,
       }),
     });
     const payload = await response.json().catch(() => ({}));
@@ -578,11 +810,20 @@ document.querySelectorAll(".catalog-form").forEach((form) => {
     event.preventDefault();
     const entity = form.dataset.entity;
     if (!entity || !currentCatalog) return;
-    updateCatalogDraft(entity, catalogRecordFromForm(entity, form));
-    form.reset();
-    renderCatalog();
+    try {
+      updateCatalogDraft(entity, catalogRecordFromForm(entity, form));
+      setCatalogFormStatus(form, "Added to the draft. Publish the catalog to send this change to tablets.");
+      form.reset();
+      renderCatalog();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Invalid catalog record.";
+      elements.catalogStatus.textContent = message;
+      setCatalogFormStatus(form, message, true);
+    }
   });
 });
+document.querySelector('form[data-entity="scheduledTrips"] select[name="routeId"]')?.addEventListener("change", renderScheduledStopTimeFields);
+document.querySelector('form[data-entity="scheduledTrips"] input[name="departureTime"]')?.addEventListener("change", renderScheduledStopTimeFields);
 elements.driverFilter.addEventListener("change", renderShifts);
 elements.fareFilter.addEventListener("change", renderShifts);
 elements.shiftSearch.addEventListener("input", renderShifts);

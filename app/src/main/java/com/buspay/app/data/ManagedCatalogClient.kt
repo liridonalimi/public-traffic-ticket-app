@@ -6,6 +6,11 @@ import com.buspay.app.domain.FareType
 import com.buspay.app.domain.ManagedCatalog
 import com.buspay.app.domain.Route
 import com.buspay.app.domain.Stop
+import com.buspay.app.domain.ServiceCalendar
+import com.buspay.app.domain.ScheduledStopTime
+import com.buspay.app.domain.ScheduledTrip
+import com.buspay.app.domain.TripAssignment
+import com.buspay.app.domain.TripDirection
 import com.buspay.app.domain.isOperationallyValid
 import java.io.IOException
 import java.net.URI
@@ -119,7 +124,28 @@ internal fun parseManagedCatalog(raw: String): ManagedCatalog {
                 priceCents = value.getInt("priceCents"),
                 eligibility = if (value.isNull("eligibility")) null else value.getString("eligibility")
             )
-        }
+        },
+        serviceCalendars = root.optJSONArray("serviceCalendars")?.mapObjects { value ->
+            ServiceCalendar(
+                id = value.getString("id"), name = value.getString("name"),
+                startDate = value.getString("startDate"), endDate = value.getString("endDate"),
+                activeWeekdays = value.getJSONArray("activeWeekdays").mapInts().toSet()
+            )
+        }.orEmpty(),
+        scheduledTrips = root.optJSONArray("scheduledTrips")?.mapObjects { value ->
+            ScheduledTrip(
+                id = value.getString("id"), routeId = value.getString("routeId"),
+                serviceCalendarId = value.getString("serviceCalendarId"),
+                departureMinutes = value.getInt("departureMinutes"),
+                direction = TripDirection.valueOf(value.getString("direction")),
+                stopTimes = value.getJSONArray("stopTimes").mapObjects { stopTime ->
+                    ScheduledStopTime(stopTime.getString("stopId"), stopTime.getInt("arrivalMinutes"), stopTime.getInt("departureMinutes"))
+                }
+            )
+        }.orEmpty(),
+        tripAssignments = root.optJSONArray("tripAssignments")?.mapObjects { value ->
+            TripAssignment(value.getString("id"), value.getString("tripId"), value.getString("serviceDate"), value.getString("driverId"), value.getString("busId"))
+        }.orEmpty()
     )
     require(catalog.isOperationallyValid())
     return catalog
@@ -129,3 +155,7 @@ private inline fun <T> org.json.JSONArray.mapObjects(transform: (JSONObject) -> 
     buildList {
         for (index in 0 until length()) add(transform(getJSONObject(index)))
     }
+
+private fun org.json.JSONArray.mapInts(): List<Int> = buildList {
+    for (index in 0 until length()) add(getInt(index))
+}

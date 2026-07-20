@@ -67,6 +67,8 @@ class SyncDatabase:
                     expected_cash_cents INTEGER CHECK(expected_cash_cents >= 0),
                     declared_cash_cents INTEGER CHECK(declared_cash_cents >= 0),
                     reconciled_at_millis INTEGER,
+                    scheduled_trip_id TEXT,
+                    assignment_id TEXT,
                     first_request_id TEXT NOT NULL REFERENCES sync_requests(request_id)
                 );
 
@@ -121,6 +123,40 @@ class SyncDatabase:
                     eligibility TEXT
                 );
 
+                CREATE TABLE IF NOT EXISTS catalog_service_calendars (
+                    id TEXT PRIMARY KEY,
+                    name TEXT NOT NULL,
+                    start_date TEXT NOT NULL,
+                    end_date TEXT NOT NULL,
+                    active_weekdays_json TEXT NOT NULL
+                );
+
+                CREATE TABLE IF NOT EXISTS catalog_scheduled_trips (
+                    id TEXT PRIMARY KEY,
+                    route_id TEXT NOT NULL REFERENCES catalog_routes(id) ON DELETE CASCADE,
+                    service_calendar_id TEXT NOT NULL REFERENCES catalog_service_calendars(id) ON DELETE CASCADE,
+                    departure_minutes INTEGER NOT NULL,
+                    direction TEXT NOT NULL CHECK(direction IN ('OUTBOUND', 'INBOUND'))
+                );
+
+                CREATE TABLE IF NOT EXISTS catalog_scheduled_stop_times (
+                    trip_id TEXT NOT NULL REFERENCES catalog_scheduled_trips(id) ON DELETE CASCADE,
+                    stop_id TEXT NOT NULL REFERENCES catalog_stops(id) ON DELETE CASCADE,
+                    stop_sequence INTEGER NOT NULL,
+                    arrival_minutes INTEGER NOT NULL,
+                    departure_minutes INTEGER NOT NULL,
+                    PRIMARY KEY(trip_id, stop_sequence),
+                    UNIQUE(trip_id, stop_id)
+                );
+
+                CREATE TABLE IF NOT EXISTS catalog_trip_assignments (
+                    id TEXT PRIMARY KEY,
+                    trip_id TEXT NOT NULL REFERENCES catalog_scheduled_trips(id) ON DELETE CASCADE,
+                    service_date TEXT NOT NULL,
+                    driver_id TEXT NOT NULL REFERENCES catalog_drivers(id) ON DELETE CASCADE,
+                    bus_id TEXT NOT NULL REFERENCES catalog_buses(id) ON DELETE CASCADE
+                );
+
                 CREATE INDEX IF NOT EXISTS idx_catalog_stops_route
                     ON catalog_stops(route_id, stop_order);
 
@@ -138,8 +174,9 @@ class SyncDatabase:
                     ON authorization_events(occurred_at_millis DESC, id DESC);
                 """
             )
-            self._ensure_shift_reconciliation_columns(connection)
+            self._ensure_shift_optional_columns(connection)
             self._seed_catalog_if_empty(connection)
+            self._seed_schedule_if_empty(connection)
             connection.commit()
         finally:
             if should_close:
@@ -154,7 +191,7 @@ class SyncDatabase:
                 connection.close()
 
     @staticmethod
-    def _ensure_shift_reconciliation_columns(connection: sqlite3.Connection) -> None:
+    def _ensure_shift_optional_columns(connection: sqlite3.Connection) -> None:
         columns = {
             row["name"] for row in connection.execute("PRAGMA table_info(shifts)").fetchall()
         }
@@ -162,6 +199,8 @@ class SyncDatabase:
             ("expected_cash_cents", "INTEGER CHECK(expected_cash_cents >= 0)"),
             ("declared_cash_cents", "INTEGER CHECK(declared_cash_cents >= 0)"),
             ("reconciled_at_millis", "INTEGER"),
+            ("scheduled_trip_id", "TEXT"),
+            ("assignment_id", "TEXT"),
         ):
             if name not in columns:
                 connection.execute(f"ALTER TABLE shifts ADD COLUMN {name} {definition}")
@@ -320,6 +359,10 @@ class SyncDatabase:
                     409,
                 )
 
+            connection.execute("DELETE FROM catalog_trip_assignments")
+            connection.execute("DELETE FROM catalog_scheduled_stop_times")
+            connection.execute("DELETE FROM catalog_scheduled_trips")
+            connection.execute("DELETE FROM catalog_service_calendars")
             connection.execute("DELETE FROM catalog_stops")
             connection.execute("DELETE FROM catalog_fares")
             connection.execute("DELETE FROM catalog_routes")
@@ -359,6 +402,62 @@ class SyncDatabase:
                 [
                     (value.id, value.name, value.price_cents, value.eligibility)
                     for value in catalog.fares
+                ],
+            )
+            connection.executemany(
+                """
+                INSERT INTO catalog_service_calendars(
+                    id, name, start_date, end_date, active_weekdays_json
+                ) VALUES (?, ?, ?, ?, ?)
+                """,
+                [
+                    (
+                        value.id,
+                        value.name,
+                        value.start_date,
+                        value.end_date,
+                        json.dumps(value.active_weekdays, separators=(",", ":")),
+                    )
+                    for value in catalog.service_calendars
+                ],
+            )
+            connection.executemany(
+                """
+                INSERT INTO catalog_scheduled_trips(
+                    id, route_id, service_calendar_id, departure_minutes, direction
+                ) VALUES (?, ?, ?, ?, ?)
+                """,
+                [
+                    (
+                        value.id,
+                        value.route_id,
+                        value.service_calendar_id,
+                        value.departure_minutes,
+                        value.direction,
+                    )
+                    for value in catalog.scheduled_trips
+                ],
+            )
+            connection.executemany(
+                """
+                INSERT INTO catalog_scheduled_stop_times(
+                    trip_id, stop_id, stop_sequence, arrival_minutes, departure_minutes
+                ) VALUES (?, ?, ?, ?, ?)
+                """,
+                [
+                    (trip.id, stop_time.stop_id, index, stop_time.arrival_minutes, stop_time.departure_minutes)
+                    for trip in catalog.scheduled_trips
+                    for index, stop_time in enumerate(trip.stop_times)
+                ],
+            )
+            connection.executemany(
+                """
+                INSERT INTO catalog_trip_assignments(id, trip_id, service_date, driver_id, bus_id)
+                VALUES (?, ?, ?, ?, ?)
+                """,
+                [
+                    (value.id, value.trip_id, value.service_date, value.driver_id, value.bus_id)
+                    for value in catalog.trip_assignments
                 ],
             )
             updated_at = int(time.time() * 1000)
@@ -473,7 +572,8 @@ class SyncDatabase:
         shifts = connection.execute(
             """
             SELECT id, driver_id, bus_id, route_id, started_at_millis, ended_at_millis,
-                   expected_cash_cents, declared_cash_cents, reconciled_at_millis
+                   expected_cash_cents, declared_cash_cents, reconciled_at_millis,
+                   scheduled_trip_id, assignment_id
             FROM shifts ORDER BY started_at_millis DESC, id
             """
         ).fetchall()
@@ -520,6 +620,8 @@ class SyncDatabase:
                 ),
                 "cashReconciliationStatus": self._cash_reconciliation_status(shift),
                 "reconciledAtMillis": shift["reconciled_at_millis"],
+                "scheduledTripId": shift["scheduled_trip_id"],
+                "assignmentId": shift["assignment_id"],
                 "syncStatus": "SYNCED",
                 "tickets": ticket_values,
             }
@@ -559,6 +661,24 @@ class SyncDatabase:
         fares = connection.execute(
             "SELECT id, name, price_cents, eligibility FROM catalog_fares ORDER BY price_cents DESC, id"
         ).fetchall()
+        calendars = connection.execute(
+            """
+            SELECT id, name, start_date, end_date, active_weekdays_json
+            FROM catalog_service_calendars ORDER BY start_date, name, id
+            """
+        ).fetchall()
+        trips = connection.execute(
+            """
+            SELECT id, route_id, service_calendar_id, departure_minutes, direction
+            FROM catalog_scheduled_trips ORDER BY departure_minutes, id
+            """
+        ).fetchall()
+        assignments = connection.execute(
+            """
+            SELECT id, trip_id, service_date, driver_id, bus_id
+            FROM catalog_trip_assignments ORDER BY service_date, id
+            """
+        ).fetchall()
         return {
             "contractVersion": CONTRACT_VERSION,
             "revision": metadata["revision"],
@@ -588,6 +708,51 @@ class SyncDatabase:
                     "eligibility": row["eligibility"],
                 }
                 for row in fares
+            ],
+            "serviceCalendars": [
+                {
+                    "id": row["id"],
+                    "name": row["name"],
+                    "startDate": row["start_date"],
+                    "endDate": row["end_date"],
+                    "activeWeekdays": json.loads(row["active_weekdays_json"]),
+                }
+                for row in calendars
+            ],
+            "scheduledTrips": [
+                {
+                    "id": row["id"],
+                    "routeId": row["route_id"],
+                    "serviceCalendarId": row["service_calendar_id"],
+                    "departureMinutes": row["departure_minutes"],
+                    "direction": row["direction"],
+                    "stopTimes": [
+                        {
+                            "stopId": stop_time["stop_id"],
+                            "arrivalMinutes": stop_time["arrival_minutes"],
+                            "departureMinutes": stop_time["departure_minutes"],
+                        }
+                        for stop_time in connection.execute(
+                            """
+                            SELECT stop_id, arrival_minutes, departure_minutes
+                            FROM catalog_scheduled_stop_times
+                            WHERE trip_id = ? ORDER BY stop_sequence
+                            """,
+                            (row["id"],),
+                        ).fetchall()
+                    ],
+                }
+                for row in trips
+            ],
+            "tripAssignments": [
+                {
+                    "id": row["id"],
+                    "tripId": row["trip_id"],
+                    "serviceDate": row["service_date"],
+                    "driverId": row["driver_id"],
+                    "busId": row["bus_id"],
+                }
+                for row in assignments
             ],
         }
 
@@ -650,6 +815,69 @@ class SyncDatabase:
         )
 
     @staticmethod
+    def _seed_schedule_if_empty(connection: sqlite3.Connection) -> None:
+        if connection.execute("SELECT 1 FROM catalog_service_calendars LIMIT 1").fetchone():
+            return
+        metadata = connection.execute(
+            "SELECT revision FROM catalog_metadata WHERE singleton = 1"
+        ).fetchone()
+        if metadata is None or metadata["revision"] != 1:
+            return
+        required_ids = ("driver-001", "driver-002", "bus-101", "bus-205", "route-1", "route-2")
+        available_ids = {
+            row["id"]
+            for table in ("catalog_drivers", "catalog_buses", "catalog_routes")
+            for row in connection.execute(f"SELECT id FROM {table}").fetchall()
+        }
+        if not set(required_ids).issubset(available_ids):
+            return
+        service_date = time.strftime("%Y-%m-%d")
+        connection.execute(
+            """
+            INSERT INTO catalog_service_calendars(
+                id, name, start_date, end_date, active_weekdays_json
+            ) VALUES (?, ?, ?, ?, ?)
+            """,
+            ("calendar-daily", "Daily pilot service", "2026-01-01", "2030-12-31", "[1,2,3,4,5,6,7]"),
+        )
+        connection.executemany(
+            """
+            INSERT INTO catalog_scheduled_trips(
+                id, route_id, service_calendar_id, departure_minutes, direction
+            ) VALUES (?, ?, ?, ?, ?)
+            """,
+            [
+                ("trip-route-1-0800", "route-1", "calendar-daily", 480, "OUTBOUND"),
+                ("trip-route-2-0915", "route-2", "calendar-daily", 555, "OUTBOUND"),
+            ],
+        )
+        connection.executemany(
+            """
+            INSERT INTO catalog_scheduled_stop_times(
+                trip_id, stop_id, stop_sequence, arrival_minutes, departure_minutes
+            ) VALUES (?, ?, ?, ?, ?)
+            """,
+            [
+                ("trip-route-1-0800", "stop-1", 0, 480, 480),
+                ("trip-route-1-0800", "stop-2", 1, 490, 491),
+                ("trip-route-1-0800", "stop-3", 2, 505, 505),
+                ("trip-route-2-0915", "stop-4", 0, 555, 555),
+                ("trip-route-2-0915", "stop-5", 1, 566, 567),
+                ("trip-route-2-0915", "stop-6", 2, 580, 580),
+            ],
+        )
+        connection.executemany(
+            """
+            INSERT INTO catalog_trip_assignments(id, trip_id, service_date, driver_id, bus_id)
+            VALUES (?, ?, ?, ?, ?)
+            """,
+            [
+                (f"assignment-{service_date}-001", "trip-route-1-0800", service_date, "driver-001", "bus-101"),
+                (f"assignment-{service_date}-002", "trip-route-2-0915", service_date, "driver-002", "bus-205"),
+            ],
+        )
+
+    @staticmethod
     def _insert_or_match_shift(
         connection: sqlite3.Connection,
         shift: ShiftInput,
@@ -665,11 +893,14 @@ class SyncDatabase:
             shift.expected_cash_cents,
             shift.declared_cash_cents,
             shift.reconciled_at_millis,
+            shift.scheduled_trip_id,
+            shift.assignment_id,
         )
         if existing is not None:
             actual = tuple(existing[name] for name in (
                 "driver_id", "bus_id", "route_id", "started_at_millis", "ended_at_millis",
-                "expected_cash_cents", "declared_cash_cents", "reconciled_at_millis"
+                "expected_cash_cents", "declared_cash_cents", "reconciled_at_millis",
+                "scheduled_trip_id", "assignment_id"
             ))
             if actual != expected:
                 raise ContractError("Shift ID already exists with different data", 409)
@@ -679,9 +910,10 @@ class SyncDatabase:
             INSERT INTO shifts(
                 id, driver_id, bus_id, route_id, started_at_millis, ended_at_millis,
                 expected_cash_cents, declared_cash_cents, reconciled_at_millis, first_request_id
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                , scheduled_trip_id, assignment_id
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
-            (shift.id, *expected, request_id),
+            (shift.id, *expected[:8], request_id, *expected[8:]),
         )
 
     @staticmethod

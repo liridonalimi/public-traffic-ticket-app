@@ -6,6 +6,11 @@ import com.buspay.app.domain.Driver
 import com.buspay.app.domain.Bus
 import com.buspay.app.domain.FareType
 import com.buspay.app.domain.ManagedCatalog
+import com.buspay.app.domain.ServiceCalendar
+import com.buspay.app.domain.ScheduledStopTime
+import com.buspay.app.domain.ScheduledTrip
+import com.buspay.app.domain.TripAssignment
+import com.buspay.app.domain.TripDirection
 import com.buspay.app.domain.Route
 import com.buspay.app.domain.Shift
 import com.buspay.app.domain.Stop
@@ -195,6 +200,23 @@ class OfflineFirstRepository(context: Context) {
                     )
                 }
             })
+            .put("serviceCalendars", JSONArray().also { values -> catalog.serviceCalendars.forEach { calendar ->
+                values.put(JSONObject().put("id", calendar.id).put("name", calendar.name)
+                    .put("startDate", calendar.startDate).put("endDate", calendar.endDate)
+                    .put("activeWeekdays", JSONArray(calendar.activeWeekdays.sorted())))
+            } })
+            .put("scheduledTrips", JSONArray().also { values -> catalog.scheduledTrips.forEach { trip ->
+                values.put(JSONObject().put("id", trip.id).put("routeId", trip.routeId)
+                    .put("serviceCalendarId", trip.serviceCalendarId).put("departureMinutes", trip.departureMinutes)
+                    .put("direction", trip.direction.name).put("stopTimes", JSONArray().also { times ->
+                        trip.stopTimes.forEach { time -> times.put(JSONObject().put("stopId", time.stopId)
+                            .put("arrivalMinutes", time.arrivalMinutes).put("departureMinutes", time.departureMinutes)) }
+                    }))
+            } })
+            .put("tripAssignments", JSONArray().also { values -> catalog.tripAssignments.forEach { assignment ->
+                values.put(JSONObject().put("id", assignment.id).put("tripId", assignment.tripId)
+                    .put("serviceDate", assignment.serviceDate).put("driverId", assignment.driverId).put("busId", assignment.busId))
+            } })
         preferences.edit().putString(KEY_MANAGED_CATALOG, value.toString()).apply()
     }
 
@@ -253,6 +275,8 @@ class OfflineFirstRepository(context: Context) {
             .put("expectedCashCents", expectedCashCents)
             .put("declaredCashCents", declaredCashCents)
             .put("reconciledAtMillis", reconciledAtMillis)
+            .put("scheduledTripId", scheduledTripId)
+            .put("assignmentId", assignmentId)
     }
 
     private fun Driver.toJson(): JSONObject {
@@ -323,7 +347,9 @@ class OfflineFirstRepository(context: Context) {
                 synced = json.optBoolean("synced", false),
                 expectedCashCents = json.optionalInt("expectedCashCents"),
                 declaredCashCents = json.optionalInt("declaredCashCents"),
-                reconciledAtMillis = json.optionalLong("reconciledAtMillis")
+                reconciledAtMillis = json.optionalLong("reconciledAtMillis"),
+                scheduledTripId = json.optionalString("scheduledTripId"),
+                assignmentId = json.optionalString("assignmentId")
             )
         }
 
@@ -405,13 +431,28 @@ class OfflineFirstRepository(context: Context) {
                     eligibility = if (value.isNull("eligibility")) null else value.getString("eligibility")
                 )
             }
+            val calendars = json.optJSONArray("serviceCalendars")?.mapObjects { value ->
+                ServiceCalendar(value.getString("id"), value.getString("name"), value.getString("startDate"), value.getString("endDate"),
+                    buildSet { val days = value.getJSONArray("activeWeekdays"); for (index in 0 until days.length()) add(days.getInt(index)) })
+            }.orEmpty()
+            val trips = json.optJSONArray("scheduledTrips")?.mapObjects { value ->
+                ScheduledTrip(value.getString("id"), value.getString("routeId"), value.getString("serviceCalendarId"),
+                    value.getInt("departureMinutes"), TripDirection.valueOf(value.getString("direction")),
+                    value.getJSONArray("stopTimes").mapObjects { time -> ScheduledStopTime(time.getString("stopId"), time.getInt("arrivalMinutes"), time.getInt("departureMinutes")) })
+            }.orEmpty()
+            val assignments = json.optJSONArray("tripAssignments")?.mapObjects { value ->
+                TripAssignment(value.getString("id"), value.getString("tripId"), value.getString("serviceDate"), value.getString("driverId"), value.getString("busId"))
+            }.orEmpty()
             return ManagedCatalog(
                 revision = json.getInt("revision"),
                 updatedAtMillis = json.getLong("updatedAtMillis"),
                 drivers = drivers,
                 buses = buses,
                 routes = routes,
-                fareTypes = fares
+                fareTypes = fares,
+                serviceCalendars = calendars,
+                scheduledTrips = trips,
+                tripAssignments = assignments
             )
         }
 
@@ -425,5 +466,8 @@ class OfflineFirstRepository(context: Context) {
 
         private fun JSONObject.optionalLong(name: String): Long? =
             if (has(name) && !isNull(name)) getLong(name) else null
+
+        private fun JSONObject.optionalString(name: String): String? =
+            if (has(name) && !isNull(name)) getString(name).takeIf(String::isNotBlank) else null
     }
 }

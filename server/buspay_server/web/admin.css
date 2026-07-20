@@ -65,6 +65,8 @@ h2 { margin-bottom: 0; font-size: clamp(1.35rem, 2vw, 2rem); letter-spacing: -.0
 .toolbar { display: flex; justify-content: space-between; align-items: end; gap: 2rem; margin-bottom: 1rem; }
 .toolbar-actions { display: flex; gap: .6rem; }
 .dashboard-status { min-height: 1.25rem; margin-bottom: 1rem; color: var(--muted); font-size: .83rem; }
+.catalog-form-status { margin: .55rem 0 0; color: var(--forest); font-size: .78rem; font-weight: 700; }
+.catalog-form-status.is-error { color: #a63225; }
 .metric-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1rem; margin-bottom: 1rem; }
 .metric-card { min-height: 180px; padding: 1.5rem; border: 1px solid var(--line); border-radius: 1.15rem; background: var(--surface); box-shadow: var(--shadow); }
 .metric-card-accent { color: white; background: var(--forest); }
@@ -108,7 +110,22 @@ tbody tr:last-child td { border-bottom: 0; }
 .catalog-form { display: grid; grid-template-columns: minmax(0, .75fr) minmax(0, 1.25fr); gap: .45rem; margin-bottom: .8rem; }
 .catalog-form-stops { grid-template-columns: repeat(3, minmax(120px, 1fr)); }
 .catalog-form-fares { grid-template-columns: .7fr 1fr .55fr 1.5fr; }
+.catalog-form-schedule { grid-template-columns: repeat(3, minmax(140px, 1fr)); }
 .catalog-form input, .catalog-form select { width: 100%; min-height: 2.55rem; padding: .55rem .65rem; border: 1px solid var(--line); border-radius: .6rem; color: var(--ink); background: var(--surface); }
+.catalog-field { display: grid; gap: .3rem; align-content: start; }
+.catalog-field > span, .stop-time-field > label > span { color: var(--muted); font-size: .7rem; font-weight: 800; letter-spacing: .02em; }
+.weekday-picker, .stop-time-editor { grid-column: 1 / -1; min-width: 0; margin: .15rem 0 0; padding: .8rem; border: 1px solid var(--line); border-radius: .7rem; background: var(--surface); }
+.weekday-picker legend, .stop-time-editor legend { padding: 0 .3rem; color: var(--ink); font-size: .78rem; font-weight: 850; }
+.weekday-options { display: grid; grid-template-columns: repeat(7, minmax(90px, 1fr)); gap: .4rem; }
+.weekday-options label { display: flex; gap: .45rem; align-items: center; min-height: 2.3rem; padding: .45rem .55rem; border: 1px solid var(--line); border-radius: .55rem; background: #fafaf4; cursor: pointer; }
+.weekday-options label:has(input:checked) { border-color: var(--forest); color: var(--forest); background: var(--forest-soft); }
+.catalog-form .weekday-options input, .catalog-form .next-day-toggle input { width: 1rem; min-height: 1rem; margin: 0; padding: 0; accent-color: var(--forest); }
+.weekday-options span, .next-day-toggle span { font-size: .72rem; font-weight: 750; }
+.stop-time-hint { margin: 0 0 .75rem; color: var(--muted); font-size: .76rem; line-height: 1.45; }
+.stop-time-fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: .55rem; }
+.stop-time-field { display: grid; gap: .4rem; padding: .65rem; border: 1px solid var(--line); border-radius: .6rem; background: #fafaf4; }
+.stop-time-field > label:first-child { display: grid; gap: .3rem; }
+.next-day-toggle { display: flex; gap: .4rem; align-items: center; width: fit-content; color: var(--muted); cursor: pointer; }
 .catalog-form .primary-button { grid-column: 1 / -1; min-height: 2.55rem; }
 .catalog-list { display: grid; gap: .35rem; max-height: 260px; overflow-y: auto; }
 .catalog-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: .65rem; align-items: center; padding: .55rem .65rem; border-radius: .55rem; background: var(--surface); }
@@ -155,7 +172,8 @@ footer { display: flex; justify-content: space-between; padding: 1.5rem clamp(1.
   .shift-card summary .optional-stat { display: none; }
   .catalog-grid { grid-template-columns: 1fr 1fr; }
   .catalog-entity-wide { grid-column: span 2; }
-  .catalog-form-stops, .catalog-form-fares { grid-template-columns: repeat(2, minmax(120px, 1fr)); }
+  .catalog-form-stops, .catalog-form-fares, .catalog-form-schedule { grid-template-columns: repeat(2, minmax(120px, 1fr)); }
+  .weekday-options { grid-template-columns: repeat(4, minmax(100px, 1fr)); }
 }
 
 @media (max-width: 680px) {
@@ -176,7 +194,8 @@ footer { display: flex; justify-content: space-between; padding: 1.5rem clamp(1.
   .catalog-heading { display: block; }
   .catalog-grid { grid-template-columns: 1fr; }
   .catalog-entity-wide { grid-column: auto; }
-  .catalog-form, .catalog-form-stops, .catalog-form-fares { grid-template-columns: 1fr; }
+  .catalog-form, .catalog-form-stops, .catalog-form-fares, .catalog-form-schedule { grid-template-columns: 1fr; }
+  .weekday-options { grid-template-columns: repeat(2, minmax(100px, 1fr)); }
   footer { display: grid; gap: .35rem; }
 }
 

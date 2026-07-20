@@ -229,6 +229,10 @@ private fun SyncBatch.toContractJson(sentAtMillis: Long): String = buildString {
         appendJsonNullableNumber("declaredCashCents", shift.declaredCashCents)
         append(',')
         appendJsonNullableNumber("reconciledAtMillis", shift.reconciledAtMillis)
+        append(',')
+        appendJsonNullableString("scheduledTripId", shift.scheduledTripId)
+        append(',')
+        appendJsonNullableString("assignmentId", shift.assignmentId)
         append('}')
     }
     append("],\"tickets\":[")
@@ -251,6 +255,11 @@ private fun SyncBatch.toContractJson(sentAtMillis: Long): String = buildString {
 
 private fun StringBuilder.appendJsonString(name: String, value: String) {
     append('"').append(name).append("\":\"").append(value.jsonEscaped()).append('"')
+}
+
+private fun StringBuilder.appendJsonNullableString(name: String, value: String?) {
+    append('"').append(name).append("\":")
+    if (value == null) append("null") else append('"').append(value.jsonEscaped()).append('"')
 }
 
 private fun StringBuilder.appendJsonNumber(name: String, value: Number) {

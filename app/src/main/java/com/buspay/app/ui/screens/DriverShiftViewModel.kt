@@ -28,6 +28,7 @@ import com.buspay.app.domain.Bus
 import com.buspay.app.domain.AdminReport
 import com.buspay.app.domain.AdminReportFilter
 import com.buspay.app.domain.Driver
+import com.buspay.app.domain.DriverDuty
 import com.buspay.app.domain.DriverShiftSummary
 import com.buspay.app.domain.FareType
 import com.buspay.app.domain.ManagedCatalog
@@ -41,6 +42,7 @@ import com.buspay.app.domain.SyncResult
 import com.buspay.app.domain.Ticket
 import com.buspay.app.domain.TicketPrintStatus
 import com.buspay.app.domain.createSyncBatch
+import com.buspay.app.domain.dutiesForDriver
 import com.buspay.app.domain.buildAdminReport
 import com.buspay.app.domain.isStopRequestReached
 import com.buspay.app.domain.nearestForwardStopIndex
@@ -56,6 +58,8 @@ data class DriverShiftUiState(
     val availableDrivers: List<Driver> = emptyList(),
     val selectedDriver: Driver? = null,
     val signedInDriver: Driver? = null,
+    val duties: List<DriverDuty> = emptyList(),
+    val selectedDuty: DriverDuty? = null,
     val buses: List<Bus> = emptyList(),
     val routes: List<Route> = emptyList(),
     val selectedBus: Bus? = null,
@@ -155,22 +159,47 @@ class DriverShiftViewModel(application: Application) : AndroidViewModel(applicat
     fun signInDriver() {
         val driver = uiState.selectedDriver ?: return
         repository.saveSignedInDriver(driver)
-        uiState = uiState.copy(signedInDriver = driver, lastClosedSummary = null)
+        val duties = repository.loadManagedCatalog()?.dutiesForDriver(driver.id).orEmpty()
+        uiState = uiState.copy(
+            signedInDriver = driver,
+            duties = duties,
+            selectedDuty = null,
+            lastClosedSummary = null
+        )
     }
 
     fun signOutDriver() {
         if (uiState.isShiftActive) return
         repository.clearSignedInDriver()
-        uiState = uiState.copy(signedInDriver = null, lastClosedSummary = null)
+        uiState = uiState.copy(
+            signedInDriver = null,
+            duties = emptyList(),
+            selectedDuty = null,
+            lastClosedSummary = null
+        )
+    }
+
+    fun selectDuty(duty: DriverDuty?) {
+        if (uiState.isShiftActive || duty != null && duty !in uiState.duties) return
+        uiState = if (duty == null) {
+            uiState.copy(selectedDuty = null, lastClosedSummary = null)
+        } else {
+            uiState.copy(
+                selectedDuty = duty,
+                selectedBus = duty.bus,
+                selectedRoute = duty.route,
+                lastClosedSummary = null
+            )
+        }
     }
 
     fun selectBus(bus: Bus) {
-        if (uiState.isShiftActive) return
+        if (uiState.isShiftActive || uiState.selectedDuty != null) return
         uiState = uiState.copy(selectedBus = bus, lastClosedSummary = null)
     }
 
     fun selectRoute(route: Route) {
-        if (uiState.isShiftActive) return
+        if (uiState.isShiftActive || uiState.selectedDuty != null) return
         uiState = uiState.copy(selectedRoute = route, lastClosedSummary = null)
     }
 
@@ -221,7 +250,9 @@ class DriverShiftViewModel(application: Application) : AndroidViewModel(applicat
             driverId = driver.id,
             busId = bus.id,
             routeId = route.id,
-            startedAtMillis = System.currentTimeMillis()
+            startedAtMillis = System.currentTimeMillis(),
+            scheduledTripId = uiState.selectedDuty?.trip?.id,
+            assignmentId = uiState.selectedDuty?.assignment?.id
         )
         val initialProgress = RouteProgress(
             shiftId = shift.id,
@@ -539,7 +570,8 @@ class DriverShiftViewModel(application: Application) : AndroidViewModel(applicat
                 cashReconciliationStatus = requireNotNull(closedShift).cashReconciliationStatus
             ),
             lastClosedRoute = closedRoute,
-            lastClosedRouteProgress = closedRouteProgress
+            lastClosedRouteProgress = closedRouteProgress,
+            selectedDuty = null
         )
     }
 
@@ -572,11 +604,17 @@ class DriverShiftViewModel(application: Application) : AndroidViewModel(applicat
         if (storedStopRequest != null && restoredStopRequest == null) {
             repository.clearStopRequest()
         }
+        val duties = restoredDriver?.let { managedCatalog?.dutiesForDriver(it.id) }.orEmpty()
+        val restoredDuty = restoredShift?.assignmentId?.let { assignmentId ->
+            duties.firstOrNull { it.assignment.id == assignmentId }
+        }
 
         return DriverShiftUiState(
             availableDrivers = availableDrivers,
             selectedDriver = restoredDriver ?: availableDrivers.first(),
             signedInDriver = restoredDriver,
+            duties = duties,
+            selectedDuty = restoredDuty,
             buses = availableBuses,
             routes = availableRoutes,
             selectedBus = restoredShift?.let { shift ->
@@ -646,6 +684,8 @@ class DriverShiftViewModel(application: Application) : AndroidViewModel(applicat
             selectedDriver = catalog.drivers.firstOrNull { it.id == uiState.selectedDriver?.id }
                 ?: catalog.drivers.first(),
             signedInDriver = signedInDriver,
+            duties = signedInDriver?.let { catalog.dutiesForDriver(it.id) }.orEmpty(),
+            selectedDuty = null,
             buses = catalog.buses,
             selectedBus = catalog.buses.firstOrNull { it.id == uiState.selectedBus?.id }
                 ?: catalog.buses.first(),

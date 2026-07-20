@@ -39,6 +39,8 @@ def batch_payload(request_id="sync-0123456789abcdef", price_cents=30):
                 "expectedCashCents": 30,
                 "declaredCashCents": 25,
                 "reconciledAtMillis": 300,
+                "scheduledTripId": "trip-route-1-0800",
+                "assignmentId": "assignment-test-001",
             }
         ],
         "tickets": [
@@ -76,6 +78,36 @@ def catalog_payload(expected_revision=1):
                 "name": "E rregullt",
                 "priceCents": 60,
                 "eligibility": None,
+            }
+        ],
+        "serviceCalendars": [
+            {
+                "id": "calendar-managed",
+                "name": "Daily test service",
+                "startDate": "2026-01-01",
+                "endDate": "2030-12-31",
+                "activeWeekdays": [1, 2, 3, 4, 5, 6, 7],
+            }
+        ],
+        "scheduledTrips": [
+            {
+                "id": "trip-managed",
+                "routeId": "route-managed",
+                "serviceCalendarId": "calendar-managed",
+                "departureMinutes": 480,
+                "direction": "OUTBOUND",
+                "stopTimes": [
+                    {"stopId": "stop-managed", "arrivalMinutes": 480, "departureMinutes": 500}
+                ],
+            }
+        ],
+        "tripAssignments": [
+            {
+                "id": "assignment-managed",
+                "tripId": "trip-managed",
+                "serviceDate": "2026-07-20",
+                "driverId": "driver-managed",
+                "busId": "bus-managed",
             }
         ],
     }
@@ -117,9 +149,31 @@ class ContractTest(unittest.TestCase):
         partial["shifts"][0]["declaredCashCents"] = None
 
         self.assertEqual(30, complete.expected_cash_cents)
+        self.assertEqual("trip-route-1-0800", complete.scheduled_trip_id)
         self.assertIsNone(parse_sync_batch(legacy).shifts[0].expected_cash_cents)
         with self.assertRaises(ContractError):
             parse_sync_batch(partial)
+
+    def test_schedule_references_and_overlapping_assignments_are_rejected(self):
+        valid = parse_catalog(catalog_payload())
+        overlap = catalog_payload()
+        overlap["scheduledTrips"].append({
+            **overlap["scheduledTrips"][0],
+            "id": "trip-overlap",
+            "departureMinutes": 490,
+            "stopTimes": [
+                {"stopId": "stop-managed", "arrivalMinutes": 490, "departureMinutes": 510}
+            ],
+        })
+        overlap["tripAssignments"].append({
+            **overlap["tripAssignments"][0],
+            "id": "assignment-overlap",
+            "tripId": "trip-overlap",
+        })
+
+        self.assertEqual("trip-managed", valid.scheduled_trips[0].id)
+        with self.assertRaises(ContractError):
+            parse_catalog(overlap)
 
 
 class DatabaseTest(unittest.TestCase):
@@ -148,6 +202,8 @@ class DatabaseTest(unittest.TestCase):
         self.assertEqual(-5, restarted_report["overall"]["cashVarianceTotalCents"])
         self.assertEqual(1, restarted_report["overall"]["reconciledShiftCount"])
         self.assertEqual("SHORTAGE", restarted_report["shifts"][0]["cashReconciliationStatus"])
+        self.assertEqual("trip-route-1-0800", restarted_report["shifts"][0]["scheduledTripId"])
+        self.assertEqual("assignment-test-001", restarted_report["shifts"][0]["assignmentId"])
 
     def test_existing_shift_table_is_migrated_for_reconciliation(self):
         legacy_path = str(Path(self.temp_directory.name) / "legacy.db")
@@ -171,7 +227,10 @@ class DatabaseTest(unittest.TestCase):
             columns = {row[1] for row in connection.execute("PRAGMA table_info(shifts)")}
 
         self.assertTrue(
-            {"expected_cash_cents", "declared_cash_cents", "reconciled_at_millis"}
+            {
+                "expected_cash_cents", "declared_cash_cents", "reconciled_at_millis",
+                "scheduled_trip_id", "assignment_id",
+            }
             <= columns
         )
 

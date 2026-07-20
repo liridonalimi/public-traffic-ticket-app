@@ -78,6 +78,10 @@
     <string name="tickets_and_cash" tools:ignore="PluralsCandidate">%1$d bileta / %2$s</string>
     <string name="end_shift">Përfundo turnin</string>
     <string name="start_shift">Fillo turnin</string>
+    <string name="scheduled_duties">Detyrat e planifikuara</string>
+    <string name="assigned_trip">Udhëtimi i caktuar</string>
+    <string name="no_scheduled_duties">Nuk ka detyra të planifikuara për këtë shofer. Turnet pilot pa planifikim mbeten të disponueshme.</string>
+    <string name="use_ad_hoc_shift">Përdor turn pa planifikim</string>
     <string name="printing">Po printohet…</string>
     <string name="sell_ticket">Shit biletë</string>
     <string name="end_shift_question">Të përfundohet turni aktual?</string>

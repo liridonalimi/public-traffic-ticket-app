@@ -140,7 +140,7 @@
           <div>
             <p class="eyebrow">Managed reference data</p>
             <h2 id="catalog-title">Operations catalog</h2>
-            <p class="catalog-summary" id="catalog-summary">Loading drivers, buses, routes, stops, and fares…</p>
+            <p class="catalog-summary" id="catalog-summary">Loading operations and schedule data…</p>
           </div>
           <div class="toolbar-actions">
             <button class="quiet-button" type="button" id="reload-catalog-button">Discard draft</button>
@@ -205,6 +205,62 @@
               <button class="primary-button" type="submit">Add / update</button>
             </form>
             <div class="catalog-list" id="catalog-fares"></div>
+          </article>
+
+          <article class="catalog-entity catalog-entity-wide">
+            <h3>Service calendars</h3>
+            <form class="catalog-form catalog-form-schedule" data-entity="serviceCalendars">
+              <label class="catalog-field"><span>Calendar ID</span><input name="id" placeholder="weekday-service" required></label>
+              <label class="catalog-field"><span>Calendar name</span><input name="name" placeholder="Weekday service" required></label>
+              <label class="catalog-field"><span>Starts on</span><input name="startDate" type="date" required></label>
+              <label class="catalog-field"><span>Ends on</span><input name="endDate" type="date" required></label>
+              <fieldset class="weekday-picker">
+                <legend>Service days</legend>
+                <div class="weekday-options">
+                  <label><input type="checkbox" name="activeWeekdays" value="1" checked><span>Monday</span></label>
+                  <label><input type="checkbox" name="activeWeekdays" value="2" checked><span>Tuesday</span></label>
+                  <label><input type="checkbox" name="activeWeekdays" value="3" checked><span>Wednesday</span></label>
+                  <label><input type="checkbox" name="activeWeekdays" value="4" checked><span>Thursday</span></label>
+                  <label><input type="checkbox" name="activeWeekdays" value="5" checked><span>Friday</span></label>
+                  <label><input type="checkbox" name="activeWeekdays" value="6"><span>Saturday</span></label>
+                  <label><input type="checkbox" name="activeWeekdays" value="7"><span>Sunday</span></label>
+                </div>
+              </fieldset>
+              <button class="primary-button" type="submit">Add / update</button>
+            </form>
+            <div class="catalog-list" id="catalog-service-calendars"></div>
+          </article>
+
+          <article class="catalog-entity catalog-entity-wide">
+            <h3>Scheduled trips</h3>
+            <form class="catalog-form catalog-form-schedule" data-entity="scheduledTrips">
+              <label class="catalog-field"><span>Trip ID</span><input name="id" placeholder="trip-route-1-0800" required></label>
+              <label class="catalog-field"><span>Route</span><select name="routeId" required></select></label>
+              <label class="catalog-field"><span>Service calendar</span><select name="serviceCalendarId" required></select></label>
+              <label class="catalog-field"><span>Departure time</span><input name="departureTime" type="time" step="60" required></label>
+              <label class="catalog-field"><span>Direction</span><select name="direction" required><option value="OUTBOUND">Outbound</option><option value="INBOUND">Inbound</option></select></label>
+              <fieldset class="stop-time-editor">
+                <legend>Times at each stop</legend>
+                <p class="stop-time-hint">Choose a route to create one normal time field for every stop.</p>
+                <div class="stop-time-fields" data-stop-time-fields></div>
+              </fieldset>
+              <button class="primary-button" type="submit">Add / update</button>
+            </form>
+            <p class="catalog-guidance">Times are stored in route order. Use “Next day” only when a trip continues after midnight.</p>
+            <div class="catalog-list" id="catalog-scheduled-trips"></div>
+          </article>
+
+          <article class="catalog-entity catalog-entity-wide">
+            <h3>Driver and vehicle assignments</h3>
+            <form class="catalog-form catalog-form-schedule" data-entity="tripAssignments">
+              <label class="catalog-field"><span>Assignment ID</span><input name="id" placeholder="assignment-001" required></label>
+              <label class="catalog-field"><span>Scheduled trip</span><select name="tripId" required></select></label>
+              <label class="catalog-field"><span>Service date</span><input name="serviceDate" type="date" required></label>
+              <label class="catalog-field"><span>Driver</span><select name="driverId" required></select></label>
+              <label class="catalog-field"><span>Bus</span><select name="busId" required></select></label>
+              <button class="primary-button" type="submit">Add / update</button>
+            </form>
+            <div class="catalog-list" id="catalog-trip-assignments"></div>
           </article>
         </div>
       </section>

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import date
 import re
 from typing import Any, Dict, List
 
@@ -31,6 +32,8 @@ class ShiftInput:
     expected_cash_cents: int | None
     declared_cash_cents: int | None
     reconciled_at_millis: int | None
+    scheduled_trip_id: str | None
+    assignment_id: str | None
 
     def canonical(self) -> Dict[str, Any]:
         return {
@@ -43,6 +46,8 @@ class ShiftInput:
             "expectedCashCents": self.expected_cash_cents,
             "declaredCashCents": self.declared_cash_cents,
             "reconciledAtMillis": self.reconciled_at_millis,
+            "scheduledTripId": self.scheduled_trip_id,
+            "assignmentId": self.assignment_id,
         }
 
 
@@ -118,6 +123,45 @@ class CatalogFareInput:
 
 
 @dataclass(frozen=True)
+class CatalogServiceCalendarInput:
+    id: str
+    name: str
+    start_date: str
+    end_date: str
+    active_weekdays: List[int]
+
+
+@dataclass(frozen=True)
+class CatalogStopTimeInput:
+    stop_id: str
+    arrival_minutes: int
+    departure_minutes: int
+
+
+@dataclass(frozen=True)
+class CatalogTripInput:
+    id: str
+    route_id: str
+    service_calendar_id: str
+    departure_minutes: int
+    direction: str
+    stop_times: List[CatalogStopTimeInput]
+
+    @property
+    def end_minutes(self) -> int:
+        return self.stop_times[-1].departure_minutes
+
+
+@dataclass(frozen=True)
+class CatalogAssignmentInput:
+    id: str
+    trip_id: str
+    service_date: str
+    driver_id: str
+    bus_id: str
+
+
+@dataclass(frozen=True)
 class CatalogInput:
     expected_revision: int
     drivers: List[CatalogDriverInput]
@@ -125,6 +169,9 @@ class CatalogInput:
     routes: List[CatalogRouteInput]
     stops: List[CatalogStopInput]
     fares: List[CatalogFareInput]
+    service_calendars: List[CatalogServiceCalendarInput]
+    scheduled_trips: List[CatalogTripInput]
+    trip_assignments: List[CatalogAssignmentInput]
 
 
 def parse_sync_batch(payload: Any) -> SyncBatchInput:
@@ -165,6 +212,9 @@ def parse_catalog(payload: Any) -> CatalogInput:
     routes = [_parse_catalog_route(value) for value in _required_nonempty_list(payload, "routes", 500)]
     stops = [_parse_catalog_stop(value) for value in _required_nonempty_list(payload, "stops", 5_000)]
     fares = [_parse_catalog_fare(value) for value in _required_nonempty_list(payload, "fares", 500)]
+    calendars = [_parse_catalog_calendar(value) for value in _optional_list(payload, "serviceCalendars", 500)]
+    trips = [_parse_catalog_trip(value) for value in _optional_list(payload, "scheduledTrips", 5_000)]
+    assignments = [_parse_catalog_assignment(value) for value in _optional_list(payload, "tripAssignments", 20_000)]
 
     for values, name in (
         (drivers, "driver"),
@@ -172,6 +222,9 @@ def parse_catalog(payload: Any) -> CatalogInput:
         (routes, "route"),
         (stops, "stop"),
         (fares, "fare"),
+        (calendars, "service calendar"),
+        (trips, "scheduled trip"),
+        (assignments, "trip assignment"),
     ):
         _require_unique([value.id for value in values], name)
 
@@ -185,6 +238,40 @@ def parse_catalog(payload: Any) -> CatalogInput:
     if route_ids != routes_with_stops:
         raise ContractError("Every route must contain at least one stop")
 
+    calendar_by_id = {value.id: value for value in calendars}
+    trip_by_id = {value.id: value for value in trips}
+    stops_by_route = {
+        route_id: sorted((stop for stop in stops if stop.route_id == route_id), key=lambda stop: stop.order)
+        for route_id in route_ids
+    }
+    for trip in trips:
+        if trip.route_id not in route_ids or trip.service_calendar_id not in calendar_by_id:
+            raise ContractError("Every scheduled trip must reference a route and service calendar")
+        expected_stop_ids = [stop.id for stop in stops_by_route[trip.route_id]]
+        if [stop_time.stop_id for stop_time in trip.stop_times] != expected_stop_ids:
+            raise ContractError("Scheduled stop times must follow every stop on the selected route")
+    driver_ids = {value.id for value in drivers}
+    bus_ids = {value.id for value in buses}
+    for assignment in assignments:
+        trip = trip_by_id.get(assignment.trip_id)
+        if trip is None or assignment.driver_id not in driver_ids or assignment.bus_id not in bus_ids:
+            raise ContractError("Every assignment must reference a trip, driver, and bus")
+        calendar = calendar_by_id[trip.service_calendar_id]
+        service_day = date.fromisoformat(assignment.service_date)
+        if not date.fromisoformat(calendar.start_date) <= service_day <= date.fromisoformat(calendar.end_date):
+            raise ContractError("Assignment date is outside the service calendar")
+        if service_day.isoweekday() not in calendar.active_weekdays:
+            raise ContractError("Assignment date is not active in the service calendar")
+    for index, first in enumerate(assignments):
+        first_trip = trip_by_id[first.trip_id]
+        for second in assignments[index + 1:]:
+            if first.service_date != second.service_date:
+                continue
+            second_trip = trip_by_id[second.trip_id]
+            overlaps = first_trip.departure_minutes < second_trip.end_minutes and second_trip.departure_minutes < first_trip.end_minutes
+            if overlaps and (first.driver_id == second.driver_id or first.bus_id == second.bus_id):
+                raise ContractError("Driver or bus assignments overlap")
+
     return CatalogInput(
         expected_revision=_required_integer(payload, "expectedRevision", minimum=0),
         drivers=drivers,
@@ -192,6 +279,75 @@ def parse_catalog(payload: Any) -> CatalogInput:
         routes=routes,
         stops=stops,
         fares=fares,
+        service_calendars=calendars,
+        scheduled_trips=trips,
+        trip_assignments=assignments,
+    )
+
+
+def _parse_catalog_calendar(value: Any) -> CatalogServiceCalendarInput:
+    _require_object(value, "service calendar")
+    start = _required_date(value, "startDate")
+    end = _required_date(value, "endDate")
+    if end < start:
+        raise ContractError("Service calendar end date must not precede its start date")
+    weekdays = _required_list(value, "activeWeekdays", 7)
+    if not weekdays or any(isinstance(day, bool) or not isinstance(day, int) or day not in range(1, 8) for day in weekdays):
+        raise ContractError("Active weekdays must contain ISO weekday numbers 1 through 7")
+    if len(weekdays) != len(set(weekdays)):
+        raise ContractError("Active weekdays must be unique")
+    return CatalogServiceCalendarInput(
+        id=_required_string(value, "id", maximum=80),
+        name=_required_string(value, "name", maximum=160),
+        start_date=start.isoformat(),
+        end_date=end.isoformat(),
+        active_weekdays=weekdays,
+    )
+
+
+def _parse_catalog_trip(value: Any) -> CatalogTripInput:
+    _require_object(value, "scheduled trip")
+    raw_stop_times = _required_nonempty_list(value, "stopTimes", 500)
+    stop_times = [_parse_catalog_stop_time(item) for item in raw_stop_times]
+    _require_unique([item.stop_id for item in stop_times], "scheduled stop")
+    previous = -1
+    for stop_time in stop_times:
+        if stop_time.arrival_minutes < previous or stop_time.departure_minutes < stop_time.arrival_minutes:
+            raise ContractError("Scheduled stop times must be ordered")
+        previous = stop_time.departure_minutes
+    direction = _required_string(value, "direction", maximum=20)
+    if direction not in ("OUTBOUND", "INBOUND"):
+        raise ContractError("Trip direction must be OUTBOUND or INBOUND")
+    departure = _required_integer(value, "departureMinutes", minimum=0, maximum=1_439)
+    if stop_times[0].arrival_minutes < departure:
+        raise ContractError("First stop time cannot precede trip departure")
+    return CatalogTripInput(
+        id=_required_string(value, "id", maximum=80),
+        route_id=_required_string(value, "routeId", maximum=80),
+        service_calendar_id=_required_string(value, "serviceCalendarId", maximum=80),
+        departure_minutes=departure,
+        direction=direction,
+        stop_times=stop_times,
+    )
+
+
+def _parse_catalog_stop_time(value: Any) -> CatalogStopTimeInput:
+    _require_object(value, "scheduled stop time")
+    return CatalogStopTimeInput(
+        stop_id=_required_string(value, "stopId", maximum=80),
+        arrival_minutes=_required_integer(value, "arrivalMinutes", minimum=0, maximum=2_879),
+        departure_minutes=_required_integer(value, "departureMinutes", minimum=0, maximum=2_879),
+    )
+
+
+def _parse_catalog_assignment(value: Any) -> CatalogAssignmentInput:
+    _require_object(value, "trip assignment")
+    return CatalogAssignmentInput(
+        id=_required_string(value, "id", maximum=80),
+        trip_id=_required_string(value, "tripId", maximum=80),
+        service_date=_required_date(value, "serviceDate").isoformat(),
+        driver_id=_required_string(value, "driverId", maximum=80),
+        bus_id=_required_string(value, "busId", maximum=80),
     )
 
 
@@ -271,6 +427,8 @@ def _parse_shift(value: Any) -> ShiftInput:
         expected_cash_cents=expected_cash,
         declared_cash_cents=declared_cash,
         reconciled_at_millis=reconciled_at,
+        scheduled_trip_id=_optional_string(value, "scheduledTripId"),
+        assignment_id=_optional_string(value, "assignmentId"),
     )
 
 
@@ -307,6 +465,23 @@ def _required_integer(
     return result
 
 
+def _optional_string(value: Dict[str, Any], name: str, maximum: int = 200) -> str | None:
+    result = value.get(name)
+    if result is None:
+        return None
+    if not isinstance(result, str) or not result or len(result) > maximum:
+        raise ContractError(f"Field {name} must be null or a nonempty string")
+    return result
+
+
+def _required_date(value: Dict[str, Any], name: str) -> date:
+    raw = _required_string(value, name, maximum=10)
+    try:
+        return date.fromisoformat(raw)
+    except ValueError as error:
+        raise ContractError(f"Field {name} must be an ISO date") from error
+
+
 def _optional_integer(
     value: Dict[str, Any],
     name: str,
@@ -328,6 +503,12 @@ def _required_list(value: Dict[str, Any], name: str, maximum: int) -> List[Any]:
     if len(result) > maximum:
         raise ContractError(f"Field {name} exceeds the batch limit")
     return result
+
+
+def _optional_list(value: Dict[str, Any], name: str, maximum: int) -> List[Any]:
+    if name not in value:
+        return []
+    return _required_list(value, name, maximum)
 
 
 def _required_nonempty_list(value: Dict[str, Any], name: str, maximum: int) -> List[Any]:
