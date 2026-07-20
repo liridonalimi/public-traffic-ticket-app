@@ -103,7 +103,9 @@ class StagingSmokeTest(unittest.TestCase):
                 return 200, {"Cache-Control": "no-store"}, b'{"status":"ok","database":"ready","contractVersion":1}'
             if token == "correct-token":
                 return 200, {"Cache-Control": "no-store"}, (
-                    b'{"overall":{"driverCount":2,"shiftCount":3,"ticketCount":4,"cashTotalCents":125}}'
+                    b'{"overall":{"driverCount":2,"shiftCount":3,"ticketCount":4,"cashTotalCents":125,'
+                    b'"expectedCashTotalCents":125,"declaredCashTotalCents":120,'
+                    b'"cashVarianceTotalCents":-5,"reconciledShiftCount":2,"unreconciledShiftCount":1}}'
                 )
             return 401, {"Cache-Control": "no-store"}, b'{"error":"Authentication required"}'
 
@@ -131,7 +133,12 @@ class StagingSmokeTest(unittest.TestCase):
                 return 403, headers, b'{"error":"Insufficient permission"}'
             if url.endswith("/v1/reports/admin"):
                 if token == "report-token":
-                    return 200, headers, b'{"overall":{"driverCount":0,"shiftCount":0,"ticketCount":0,"cashTotalCents":0}}'
+                    return 200, headers, (
+                        b'{"overall":{"driverCount":0,"shiftCount":0,"ticketCount":0,'
+                        b'"cashTotalCents":0,"expectedCashTotalCents":0,'
+                        b'"declaredCashTotalCents":0,"cashVarianceTotalCents":0,'
+                        b'"reconciledShiftCount":0,"unreconciledShiftCount":0}}'
+                    )
                 if token == "audit-token":
                     return 403, headers, b'{"error":"Insufficient permission"}'
                 return 401, headers, b'{"error":"Authentication required"}'

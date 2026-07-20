@@ -51,6 +51,8 @@ It currently includes:
 - server-enforced role discovery with separate report, catalog-read, catalog-write, and sync permissions
 - two-credential overlap windows for controlled, zero-downtime role-token rotation
 - persistent authorization audit events and an isolated security-auditor web workspace
+- required counted-cash handover before shift closure with immediate variance feedback
+- offline and synchronized expected/declared cash reconciliation in Android and web reports
 - cash ticket count and cash total during an active shift
 - persistent local active shift storage
 - persistent local ticket storage for future sync
@@ -83,7 +85,7 @@ It currently includes:
 20. Centrally managed drivers, buses, routes, stops, and fares - complete
 21. Production access boundaries and role-scoped administration - complete
 22. Credential rotation and authorization auditability - complete
-23. Shift cash reconciliation and handover - planned
+23. Shift cash reconciliation and handover - complete
 24. Scheduled trips and driver/vehicle assignments - planned
 25. Fare policy engine for zones, time rules, and transfers - planned
 26. Controlled ticket voids, corrections, and reprints - planned
@@ -123,6 +125,7 @@ Presentation documentation:
 - English: `docs/EN/20-central-operations-catalog.md`
 - English: `docs/EN/21-role-scoped-production-access.md`
 - English: `docs/EN/22-credential-rotation-and-authorization-audit.md`
+- English: `docs/EN/23-shift-cash-reconciliation-and-handover.md`
 - English product roadmap: `docs/EN/PRODUCT_ROADMAP.md`
 - Albanian: `docs/SQ/01-themeli-i-projektit-dhe-skeleti-android.md`
 - Albanian: `docs/SQ/02-rrjedha-e-turnit-te-shoferit.md`
@@ -146,6 +149,7 @@ Presentation documentation:
 - Albanian: `docs/SQ/20-katalogu-qendror-i-operacioneve.md`
 - Albanian: `docs/SQ/21-qasja-ne-prodhim-sipas-roleve.md`
 - Albanian: `docs/SQ/22-rotacioni-i-kredencialeve-dhe-auditimi-i-qasjes.md`
+- Albanian: `docs/SQ/23-rakordimi-dhe-dorezimi-i-arkes-se-turnit.md`
 - Albanian product roadmap: `docs/SQ/UDHERREFYESI_I_PRODUKTIT.md`
 
 Technical documentation:
@@ -172,6 +176,7 @@ Technical documentation:
 - `docs/TECHNICAL/20-central-operations-catalog.md`
 - `docs/TECHNICAL/21-role-scoped-production-access.md`
 - `docs/TECHNICAL/22-credential-rotation-and-authorization-audit.md`
+- `docs/TECHNICAL/23-shift-cash-reconciliation-and-handover.md`
 - Product roadmap: `docs/TECHNICAL/PRODUCT_ROADMAP.md`
 
 ## Product roadmap
@@ -233,6 +238,8 @@ Aktualisht përfshin:
 - zbulimin e roleve dhe ndarjen në server të raportimit, leximit/shkrimit të katalogut dhe sinkronizimit
 - dritaren me dy kredenciale për rotacion të kontrolluar pa ndërprerje të shërbimit
 - ngjarjet e ruajtura të autorizimit dhe hapësirën e izoluar web për auditorin e sigurisë
+- dorëzimin e detyrueshëm të arkës së numëruar para mbylljes së turnit me diferencë të menjëhershme
+- rakordimin offline dhe të sinkronizuar të arkës së pritur/deklaruar në raportet Android dhe web
 - numërimin e biletave me para të gatshme dhe totalin e arkës gjatë turnit aktiv
 - ruajtjen lokale të turnit aktiv
 - ruajtjen lokale të biletave për sinkronizim të ardhshëm
@@ -265,7 +272,7 @@ Aktualisht përfshin:
 20. Menaxhimi qendror i shoferëve, autobusëve, linjave, ndalesave dhe tarifave - përfunduar
 21. Kufijtë e qasjes në prodhim dhe administrimi sipas roleve - përfunduar
 22. Rotacioni i kredencialeve dhe auditimi i autorizimit - përfunduar
-23. Rakordimi dhe dorëzimi i arkës së turnit - planifikuar
+23. Rakordimi dhe dorëzimi i arkës së turnit - përfunduar
 24. Udhëtimet e planifikuara dhe caktimi i shoferit/mjetit - planifikuar
 25. Motori i politikave të tarifave për zona, kohë dhe transferta - planifikuar
 26. Anulimi, korrigjimi dhe riprintimi i kontrolluar i biletave - planifikuar

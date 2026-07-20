@@ -16,8 +16,16 @@ class AdminReportingTest {
         FareType("student", "Student", 30)
     )
     private val shifts = listOf(
-        closedShift("shift-1", "driver-1", startedAt = 100L, synced = true),
-        closedShift("shift-2", "driver-1", startedAt = 300L, synced = false),
+        closedShift("shift-1", "driver-1", startedAt = 100L, synced = true).copy(
+            expectedCashCents = 80,
+            declaredCashCents = 80,
+            reconciledAtMillis = 200L
+        ),
+        closedShift("shift-2", "driver-1", startedAt = 300L, synced = false).copy(
+            expectedCashCents = 50,
+            declaredCashCents = 45,
+            reconciledAtMillis = 400L
+        ),
         closedShift("shift-3", "driver-2", startedAt = 500L, synced = true)
     )
     private val tickets = listOf(
@@ -36,6 +44,15 @@ class AdminReportingTest {
         assertEquals(3, report.totals.shiftCount)
         assertEquals(4, report.totals.ticketCount)
         assertEquals(160, report.totals.cashTotalCents)
+        assertEquals(160, report.totals.expectedCashTotalCents)
+        assertEquals(125, report.totals.declaredCashTotalCents)
+        assertEquals(-5, report.totals.cashVarianceTotalCents)
+        assertEquals(2, report.totals.reconciledShiftCount)
+        assertEquals(1, report.totals.unreconciledShiftCount)
+        assertEquals(
+            CashReconciliationStatus.SHORTAGE,
+            report.shifts.first { it.shiftId == "shift-2" }.cashReconciliationStatus
+        )
         assertEquals(2, report.drivers.first { it.driverId == "driver-1" }.shiftCount)
         assertEquals(3, report.drivers.first { it.driverId == "driver-1" }.ticketCount)
         assertEquals(2, report.totals.fareTypeSummaries.size)

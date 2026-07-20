@@ -250,6 +250,9 @@ class OfflineFirstRepository(context: Context) {
             .put("startedAtMillis", startedAtMillis)
             .put("endedAtMillis", endedAtMillis)
             .put("synced", synced)
+            .put("expectedCashCents", expectedCashCents)
+            .put("declaredCashCents", declaredCashCents)
+            .put("reconciledAtMillis", reconciledAtMillis)
     }
 
     private fun Driver.toJson(): JSONObject {
@@ -317,7 +320,10 @@ class OfflineFirstRepository(context: Context) {
                 } else {
                     json.getLong("endedAtMillis")
                 },
-                synced = json.optBoolean("synced", false)
+                synced = json.optBoolean("synced", false),
+                expectedCashCents = json.optionalInt("expectedCashCents"),
+                declaredCashCents = json.optionalInt("declaredCashCents"),
+                reconciledAtMillis = json.optionalLong("reconciledAtMillis")
             )
         }
 
@@ -413,5 +419,11 @@ class OfflineFirstRepository(context: Context) {
             buildList {
                 for (index in 0 until length()) add(transform(getJSONObject(index)))
             }
+
+        private fun JSONObject.optionalInt(name: String): Int? =
+            if (has(name) && !isNull(name)) getInt(name) else null
+
+        private fun JSONObject.optionalLong(name: String): Long? =
+            if (has(name) && !isNull(name)) getLong(name) else null
     }
 }

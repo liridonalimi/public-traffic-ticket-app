@@ -40,6 +40,10 @@ data class ShiftReport(
     val tickets: List<TicketReport>,
     val ticketCount: Int,
     val cashTotalCents: Int,
+    val expectedCashCents: Int?,
+    val declaredCashCents: Int?,
+    val cashVarianceCents: Int?,
+    val cashReconciliationStatus: CashReconciliationStatus,
     val fareTypeSummaries: List<FareTypeSummary>,
     val syncStatus: ReportingSyncStatus
 )
@@ -58,6 +62,11 @@ data class AdminReportTotals(
     val shiftCount: Int,
     val ticketCount: Int,
     val cashTotalCents: Int,
+    val expectedCashTotalCents: Int,
+    val declaredCashTotalCents: Int,
+    val cashVarianceTotalCents: Int,
+    val reconciledShiftCount: Int,
+    val unreconciledShiftCount: Int,
     val syncedShiftCount: Int,
     val partiallySyncedShiftCount: Int,
     val pendingShiftCount: Int,
@@ -154,6 +163,10 @@ fun buildAdminReport(
                 tickets = ticketReports,
                 ticketCount = shiftTickets.size,
                 cashTotalCents = shiftTickets.sumOf(Ticket::priceCents),
+                expectedCashCents = shift.expectedCashCents,
+                declaredCashCents = shift.declaredCashCents,
+                cashVarianceCents = shift.cashVarianceCents,
+                cashReconciliationStatus = shift.cashReconciliationStatus,
                 fareTypeSummaries = summarizeTicketsByFare(shiftTickets, fareTypes),
                 syncStatus = syncStatus
             )
@@ -196,6 +209,17 @@ fun buildAdminReport(
             shiftCount = shiftReports.size,
             ticketCount = shiftReports.sumOf(ShiftReport::ticketCount),
             cashTotalCents = shiftReports.sumOf(ShiftReport::cashTotalCents),
+            expectedCashTotalCents = shiftReports.sumOf { report ->
+                report.expectedCashCents ?: report.cashTotalCents
+            },
+            declaredCashTotalCents = shiftReports.sumOf { it.declaredCashCents ?: 0 },
+            cashVarianceTotalCents = shiftReports.sumOf { it.cashVarianceCents ?: 0 },
+            reconciledShiftCount = shiftReports.count {
+                it.cashReconciliationStatus != CashReconciliationStatus.NOT_RECORDED
+            },
+            unreconciledShiftCount = shiftReports.count {
+                it.cashReconciliationStatus == CashReconciliationStatus.NOT_RECORDED
+            },
             syncedShiftCount = shiftReports.count { it.syncStatus == ReportingSyncStatus.SYNCED },
             partiallySyncedShiftCount = shiftReports.count {
                 it.syncStatus == ReportingSyncStatus.PARTIALLY_SYNCED

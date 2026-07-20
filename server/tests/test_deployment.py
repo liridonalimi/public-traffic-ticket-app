@@ -29,6 +29,9 @@ def payload():
                 "routeId": "route-001",
                 "startedAtMillis": 100,
                 "endedAtMillis": 300,
+                "expectedCashCents": 50,
+                "declaredCashCents": 50,
+                "reconciledAtMillis": 300,
             }
         ],
         "tickets": [
@@ -135,6 +138,9 @@ class BackupRestoreTest(unittest.TestCase):
         self.assertEqual(1, restored_report["overall"]["shiftCount"])
         self.assertEqual(1, restored_report["overall"]["ticketCount"])
         self.assertEqual(50, restored_report["overall"]["cashTotalCents"])
+        self.assertEqual(50, restored_report["overall"]["declaredCashTotalCents"])
+        self.assertEqual(0, restored_report["overall"]["cashVarianceTotalCents"])
+        self.assertEqual("MATCHED", restored_report["shifts"][0]["cashReconciliationStatus"])
         self.assertEqual(
             "allowed",
             SyncDatabase(str(restored_path)).authorization_audit(1)["events"][0]["outcome"],

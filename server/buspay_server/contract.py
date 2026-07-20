@@ -28,6 +28,9 @@ class ShiftInput:
     route_id: str
     started_at_millis: int
     ended_at_millis: int
+    expected_cash_cents: int | None
+    declared_cash_cents: int | None
+    reconciled_at_millis: int | None
 
     def canonical(self) -> Dict[str, Any]:
         return {
@@ -37,6 +40,9 @@ class ShiftInput:
             "routeId": self.route_id,
             "startedAtMillis": self.started_at_millis,
             "endedAtMillis": self.ended_at_millis,
+            "expectedCashCents": self.expected_cash_cents,
+            "declaredCashCents": self.declared_cash_cents,
+            "reconciledAtMillis": self.reconciled_at_millis,
         }
 
 
@@ -247,6 +253,14 @@ def _parse_shift(value: Any) -> ShiftInput:
         raise ContractError("Every shift must be a JSON object")
     started_at = _required_integer(value, "startedAtMillis", minimum=0)
     ended_at = _required_integer(value, "endedAtMillis", minimum=started_at)
+    expected_cash = _optional_integer(value, "expectedCashCents", minimum=0, maximum=100_000_000)
+    declared_cash = _optional_integer(value, "declaredCashCents", minimum=0, maximum=100_000_000)
+    reconciled_at = _optional_integer(value, "reconciledAtMillis", minimum=ended_at)
+    reconciliation_values = (expected_cash, declared_cash, reconciled_at)
+    if any(item is None for item in reconciliation_values) and any(
+        item is not None for item in reconciliation_values
+    ):
+        raise ContractError("Shift cash reconciliation fields must be supplied together")
     return ShiftInput(
         id=_required_string(value, "id"),
         driver_id=_required_string(value, "driverId"),
@@ -254,6 +268,9 @@ def _parse_shift(value: Any) -> ShiftInput:
         route_id=_required_string(value, "routeId"),
         started_at_millis=started_at,
         ended_at_millis=ended_at,
+        expected_cash_cents=expected_cash,
+        declared_cash_cents=declared_cash,
+        reconciled_at_millis=reconciled_at,
     )
 
 
@@ -287,6 +304,20 @@ def _required_integer(
     result = value.get(name)
     if isinstance(result, bool) or not isinstance(result, int) or not minimum <= result <= maximum:
         raise ContractError(f"Field {name} must be an integer between {minimum} and {maximum}")
+    return result
+
+
+def _optional_integer(
+    value: Dict[str, Any],
+    name: str,
+    minimum: int,
+    maximum: int = 9_223_372_036_854_775_807,
+) -> int | None:
+    result = value.get(name)
+    if result is None:
+        return None
+    if isinstance(result, bool) or not isinstance(result, int) or not minimum <= result <= maximum:
+        raise ContractError(f"Field {name} must be null or an integer between {minimum} and {maximum}")
     return result
 
 

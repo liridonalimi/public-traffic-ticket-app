@@ -29,6 +29,10 @@ const elements = {
   heroCopy: document.querySelector("#hero-copy"),
   heroEyebrow: document.querySelector("#hero-eyebrow"),
   metricDrivers: document.querySelector("#metric-drivers"),
+  metricExpectedCash: document.querySelector("#metric-expected-cash"),
+  metricDeclaredCash: document.querySelector("#metric-declared-cash"),
+  metricCashVariance: document.querySelector("#metric-cash-variance"),
+  metricReconciledShifts: document.querySelector("#metric-reconciled-shifts"),
   metricRevenue: document.querySelector("#metric-revenue"),
   metricShifts: document.querySelector("#metric-shifts"),
   metricTickets: document.querySelector("#metric-tickets"),
@@ -55,6 +59,11 @@ const timestamp = new Intl.DateTimeFormat("en", { dateStyle: "medium", timeStyle
 
 function formatMoney(cents) {
   return money.format((Number(cents) || 0) / 100);
+}
+
+function formatSignedMoney(cents) {
+  const value = Number(cents) || 0;
+  return `${value > 0 ? "+" : value < 0 ? "−" : ""}${formatMoney(Math.abs(value))}`;
 }
 
 function formatTime(millis) {
@@ -97,6 +106,10 @@ function renderMetrics(report) {
   elements.metricTickets.textContent = Number(overall.ticketCount) || 0;
   elements.metricShifts.textContent = Number(overall.shiftCount) || 0;
   elements.metricDrivers.textContent = Number(overall.driverCount) || 0;
+  elements.metricExpectedCash.textContent = formatMoney(overall.expectedCashTotalCents);
+  elements.metricDeclaredCash.textContent = formatMoney(overall.declaredCashTotalCents);
+  elements.metricCashVariance.textContent = formatSignedMoney(overall.cashVarianceTotalCents);
+  elements.metricReconciledShifts.textContent = `${Number(overall.reconciledShiftCount) || 0} / ${Number(overall.shiftCount) || 0}`;
 }
 
 function renderFares(report) {
@@ -173,19 +186,24 @@ function shiftCard(shift) {
   primary.append(driver, identity);
   const status = shiftStat("Status", shift.syncStatus, true);
   status.querySelector("strong").className = "status-pill";
+  const reconciliationStatus = labelFare(shift.cashReconciliationStatus || "NOT_RECORDED");
   summary.append(
     primary,
     shiftStat("Started", formatTime(shift.startedAtMillis)),
     shiftStat("Bus · route", `${shift.busId} · ${shift.routeId}`, true),
     shiftStat("Tickets", String(shift.ticketCount)),
     shiftStat("Revenue", formatMoney(shift.cashTotalCents)),
-    document.createElement("span")
+    shiftStat("Cash", reconciliationStatus, true)
   );
 
   const body = document.createElement("div");
   body.className = "ticket-detail";
   const heading = document.createElement("h3");
   heading.textContent = `Ticket records · ${formatDuration(shift.durationMillis)}`;
+  const handover = document.createElement("p");
+  handover.textContent = shift.cashReconciliationStatus === "NOT_RECORDED"
+    ? "Cash handover was not recorded for this legacy shift."
+    : `Cash handover · expected ${formatMoney(shift.expectedCashCents)} · declared ${formatMoney(shift.declaredCashCents)} · variance ${formatSignedMoney(shift.cashVarianceCents)}`;
   const grid = document.createElement("div");
   grid.className = "ticket-grid";
   (shift.tickets || []).forEach((ticket) => grid.append(ticketItem(ticket)));
@@ -194,7 +212,7 @@ function shiftCard(shift) {
     empty.textContent = "No tickets recorded for this shift.";
     grid.append(empty);
   }
-  body.append(heading, grid);
+  body.append(heading, handover, grid);
   details.append(summary, body);
   return details;
 }

@@ -496,18 +496,23 @@ class DriverShiftViewModel(application: Application) : AndroidViewModel(applicat
         uiState.unprintedTickets.lastOrNull()?.let(::printTicket)
     }
 
-    fun endShift() {
+    fun endShift(declaredCashCents: Int) {
         if (!uiState.isShiftActive || uiState.isPrinting || uiState.unprintedTickets.isNotEmpty()) {
             return
         }
+        if (declaredCashCents !in 0..100_000_000) return
 
         stopGpsTracking()
         stopRequestInput.stop()
         val closedRoute = uiState.selectedRoute
         val closedRouteProgress = uiState.routeProgress
+        val reconciledAtMillis = System.currentTimeMillis()
         val closedShift = uiState.activeShift?.copy(
-            endedAtMillis = System.currentTimeMillis(),
-            synced = false
+            endedAtMillis = reconciledAtMillis,
+            synced = false,
+            expectedCashCents = uiState.cashTotalCents,
+            declaredCashCents = declaredCashCents,
+            reconciledAtMillis = reconciledAtMillis
         )
         closedShift?.let(repository::saveClosedShift)
         repository.clearActiveShift()
@@ -528,7 +533,10 @@ class DriverShiftViewModel(application: Application) : AndroidViewModel(applicat
             lastClosedSummary = DriverShiftSummary(
                 ticketCount = uiState.ticketCount,
                 cashTotalCents = uiState.cashTotalCents,
-                fareTypeSummaries = uiState.fareTypeSummaries
+                fareTypeSummaries = uiState.fareTypeSummaries,
+                declaredCashCents = declaredCashCents,
+                cashVarianceCents = declaredCashCents - uiState.cashTotalCents,
+                cashReconciliationStatus = requireNotNull(closedShift).cashReconciliationStatus
             ),
             lastClosedRoute = closedRoute,
             lastClosedRouteProgress = closedRouteProgress

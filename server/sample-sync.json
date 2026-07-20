@@ -9,7 +9,10 @@
       "busId": "bus-001",
       "routeId": "route-001",
       "startedAtMillis": 1784099400000,
-      "endedAtMillis": 1784100000000
+      "endedAtMillis": 1784100000000,
+      "expectedCashCents": 50,
+      "declaredCashCents": 50,
+      "reconciledAtMillis": 1784100000000
     }
   ],
   "tickets": [

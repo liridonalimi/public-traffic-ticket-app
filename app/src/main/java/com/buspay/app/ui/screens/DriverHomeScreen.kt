@@ -21,6 +21,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -34,6 +35,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -62,10 +64,12 @@ import com.buspay.app.device.PdfTicketPrinter
 import com.buspay.app.device.PrinterDevice
 import com.buspay.app.domain.Bus
 import com.buspay.app.domain.AdminReport
+import com.buspay.app.domain.CashReconciliationStatus
 import com.buspay.app.domain.Driver
 import com.buspay.app.domain.FareType
 import com.buspay.app.domain.Route
 import com.buspay.app.domain.ReportingSyncStatus
+import com.buspay.app.domain.parseEuroAmountToCents
 import com.buspay.app.data.SyncRuntimeMode
 import java.io.File
 import java.text.DateFormat
@@ -81,6 +85,7 @@ fun DriverHomeScreen(viewModel: DriverShiftViewModel = viewModel()) {
     var showAdminReport by remember { mutableStateOf(false) }
     var workspace by rememberSaveable { mutableStateOf(PilotWorkspace.DRIVER) }
     var showEndShiftConfirmation by remember { mutableStateOf(false) }
+    var cashHandoverDraft by remember { mutableStateOf("") }
     var hasBluetoothPermission by remember {
         mutableStateOf(hasBluetoothPrinterPermission(context))
     }
@@ -576,6 +581,17 @@ fun DriverHomeScreen(viewModel: DriverShiftViewModel = viewModel()) {
                                 )
                             )
                         }
+                        summary.declaredCashCents?.let { declared ->
+                            Text(
+                                stringResource(
+                                    R.string.cash_handover_summary,
+                                    formatEuroCents(summary.cashTotalCents),
+                                    formatEuroCents(declared),
+                                    formatSignedEuroCents(summary.cashVarianceCents ?: 0),
+                                    localizedCashReconciliationStatus(summary.cashReconciliationStatus)
+                                )
+                            )
+                        }
                     }
                 }
 
@@ -586,7 +602,10 @@ fun DriverHomeScreen(viewModel: DriverShiftViewModel = viewModel()) {
                 ) {
                     if (state.isShiftActive) {
                         OutlinedButton(
-                            onClick = { showEndShiftConfirmation = true },
+                            onClick = {
+                                cashHandoverDraft = ""
+                                showEndShiftConfirmation = true
+                            },
                             enabled = !state.isPrinting && state.unprintedTickets.isEmpty(),
                             modifier = Modifier.weight(1f)
                         ) {
@@ -622,20 +641,65 @@ fun DriverHomeScreen(viewModel: DriverShiftViewModel = viewModel()) {
         }
 
         if (showEndShiftConfirmation) {
+            val declaredCashCents = parseEuroAmountToCents(cashHandoverDraft)
+            val varianceCents = declaredCashCents?.minus(state.cashTotalCents)
             AlertDialog(
                 onDismissRequest = { showEndShiftConfirmation = false },
                 title = { Text(stringResource(R.string.end_shift_question)) },
                 text = {
-                    Text(stringResource(R.string.end_shift_explanation))
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text(stringResource(R.string.end_shift_explanation))
+                        Text(
+                            stringResource(
+                                R.string.expected_cash_value,
+                                formatEuroCents(state.cashTotalCents)
+                            ),
+                            fontWeight = FontWeight.Bold
+                        )
+                        OutlinedTextField(
+                            value = cashHandoverDraft,
+                            onValueChange = { cashHandoverDraft = it },
+                            label = { Text(stringResource(R.string.counted_cash_eur)) },
+                            supportingText = {
+                                Text(
+                                    stringResource(
+                                        if (cashHandoverDraft.isNotBlank() && declaredCashCents == null) {
+                                            R.string.invalid_cash_amount
+                                        } else {
+                                            R.string.cash_count_guidance
+                                        }
+                                    )
+                                )
+                            },
+                            isError = cashHandoverDraft.isNotBlank() && declaredCashCents == null,
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                            singleLine = true
+                        )
+                        varianceCents?.let { variance ->
+                            Text(
+                                stringResource(
+                                    R.string.cash_variance_value,
+                                    formatSignedEuroCents(variance)
+                                ),
+                                color = if (variance == 0) {
+                                    MaterialTheme.colorScheme.primary
+                                } else {
+                                    MaterialTheme.colorScheme.error
+                                },
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
                 },
                 confirmButton = {
                     Button(
+                        enabled = declaredCashCents != null,
                         onClick = {
                             showEndShiftConfirmation = false
-                            viewModel.endShift()
+                            viewModel.endShift(requireNotNull(declaredCashCents))
                         }
                     ) {
-                        Text(stringResource(R.string.end_shift))
+                        Text(stringResource(R.string.confirm_cash_handover))
                     }
                 },
                 dismissButton = {
@@ -1007,6 +1071,21 @@ private fun AdminReportScreen(
                         )
                         Text(
                             stringResource(
+                                R.string.reconciliation_totals,
+                                formatEuroCents(report.totals.expectedCashTotalCents),
+                                formatEuroCents(report.totals.declaredCashTotalCents),
+                                formatSignedEuroCents(report.totals.cashVarianceTotalCents)
+                            )
+                        )
+                        Text(
+                            stringResource(
+                                R.string.reconciliation_shift_counts,
+                                report.totals.reconciledShiftCount,
+                                report.totals.unreconciledShiftCount
+                            )
+                        )
+                        Text(
+                            stringResource(
                                 R.string.sync_totals,
                                 report.totals.syncedShiftCount,
                                 report.totals.partiallySyncedShiftCount,
@@ -1133,6 +1212,18 @@ private fun AdminReportScreen(
                                     R.string.tickets_cash_value,
                                     shift.ticketCount,
                                     formatEuroCents(shift.cashTotalCents)
+                                )
+                            )
+                            Text(
+                                stringResource(
+                                    R.string.cash_reconciliation_value,
+                                    shift.expectedCashCents?.let(::formatEuroCents)
+                                        ?: stringResource(R.string.not_available),
+                                    shift.declaredCashCents?.let(::formatEuroCents)
+                                        ?: stringResource(R.string.not_available),
+                                    shift.cashVarianceCents?.let(::formatSignedEuroCents)
+                                        ?: stringResource(R.string.not_available),
+                                    localizedCashReconciliationStatus(shift.cashReconciliationStatus)
                                 )
                             )
                             shift.fareTypeSummaries.forEach { fare ->
@@ -1335,6 +1426,15 @@ private fun formatEuroCents(cents: Int): String {
     return "EUR $euros.${remainder.toString().padStart(2, '0')}"
 }
 
+private fun formatSignedEuroCents(cents: Int): String {
+    val sign = when {
+        cents > 0 -> "+"
+        cents < 0 -> "−"
+        else -> ""
+    }
+    return sign + formatEuroCents(kotlin.math.abs(cents))
+}
+
 private fun formatReportDateTime(timestampMillis: Long): String {
     return DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT)
         .format(Date(timestampMillis))
@@ -1384,6 +1484,18 @@ private fun localizedReportingSyncStatus(status: ReportingSyncStatus): String {
             ReportingSyncStatus.SYNCED -> R.string.report_sync_synced
             ReportingSyncStatus.PARTIALLY_SYNCED -> R.string.report_sync_partial
             ReportingSyncStatus.PENDING -> R.string.report_sync_pending
+        }
+    )
+}
+
+@Composable
+private fun localizedCashReconciliationStatus(status: CashReconciliationStatus): String {
+    return stringResource(
+        when (status) {
+            CashReconciliationStatus.NOT_RECORDED -> R.string.cash_status_not_recorded
+            CashReconciliationStatus.MATCHED -> R.string.cash_status_matched
+            CashReconciliationStatus.SHORTAGE -> R.string.cash_status_shortage
+            CashReconciliationStatus.SURPLUS -> R.string.cash_status_surplus
         }
     )
 }

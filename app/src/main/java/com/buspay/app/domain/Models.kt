@@ -31,8 +31,31 @@ data class Shift(
     val routeId: String,
     val startedAtMillis: Long,
     val endedAtMillis: Long? = null,
-    val synced: Boolean = false
-)
+    val synced: Boolean = false,
+    val expectedCashCents: Int? = null,
+    val declaredCashCents: Int? = null,
+    val reconciledAtMillis: Long? = null
+) {
+    val cashVarianceCents: Int? = expectedCashCents?.let { expected ->
+        declaredCashCents?.minus(expected)
+    }
+
+    val cashReconciliationStatus: CashReconciliationStatus
+        get() = when {
+            expectedCashCents == null || declaredCashCents == null || reconciledAtMillis == null ->
+                CashReconciliationStatus.NOT_RECORDED
+            declaredCashCents < expectedCashCents -> CashReconciliationStatus.SHORTAGE
+            declaredCashCents > expectedCashCents -> CashReconciliationStatus.SURPLUS
+            else -> CashReconciliationStatus.MATCHED
+        }
+}
+
+enum class CashReconciliationStatus {
+    NOT_RECORDED,
+    MATCHED,
+    SHORTAGE,
+    SURPLUS
+}
 
 enum class RouteProgressSource {
     SHIFT_START,
@@ -131,8 +154,24 @@ data class FareTypeSummary(
 data class DriverShiftSummary(
     val ticketCount: Int,
     val cashTotalCents: Int,
-    val fareTypeSummaries: List<FareTypeSummary> = emptyList()
+    val fareTypeSummaries: List<FareTypeSummary> = emptyList(),
+    val declaredCashCents: Int? = null,
+    val cashVarianceCents: Int? = null,
+    val cashReconciliationStatus: CashReconciliationStatus = CashReconciliationStatus.NOT_RECORDED
 )
+
+fun parseEuroAmountToCents(value: String, maximumCents: Int = 100_000_000): Int? {
+    val normalized = value.trim().replace(',', '.')
+    if (!normalized.matches(Regex("^(0|[1-9]\\d*)(\\.\\d{1,2})?$"))) return null
+    val parts = normalized.split('.')
+    val euros = parts[0].toLongOrNull() ?: return null
+    val cents = when (val fraction = parts.getOrNull(1).orEmpty()) {
+        "" -> 0
+        else -> fraction.padEnd(2, '0').toInt()
+    }
+    val total = euros * 100L + cents
+    return total.takeIf { it in 0..maximumCents.toLong() }?.toInt()
+}
 
 fun summarizeTicketsByFare(
     tickets: List<Ticket>,

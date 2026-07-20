@@ -73,9 +73,18 @@ def run_smoke(
         raise RuntimeError(f"Authenticated report failed with HTTP {report_status}")
     report = json.loads(report_raw)
     overall = report.get("overall")
-    if not isinstance(overall, dict) or not all(
-        name in overall for name in ("driverCount", "shiftCount", "ticketCount", "cashTotalCents")
-    ):
+    required_overall_fields = (
+        "driverCount",
+        "shiftCount",
+        "ticketCount",
+        "cashTotalCents",
+        "expectedCashTotalCents",
+        "declaredCashTotalCents",
+        "cashVarianceTotalCents",
+        "reconciledShiftCount",
+        "unreconciledShiftCount",
+    )
+    if not isinstance(overall, dict) or not all(name in overall for name in required_overall_fields):
         raise RuntimeError("Authenticated report does not match contract v1")
     if report_headers.get("Cache-Control", "").lower() != "no-store":
         raise RuntimeError("Report response is missing no-store cache protection")
@@ -115,6 +124,9 @@ def run_smoke(
         f"Closed shifts: {overall['shiftCount']}\n"
         f"Tickets: {overall['ticketCount']}\n"
         f"Cash cents: {overall['cashTotalCents']}\n"
+        f"Declared cash cents: {overall['declaredCashTotalCents']}\n"
+        f"Cash variance cents: {overall['cashVarianceTotalCents']}\n"
+        f"Reconciled shifts: {overall['reconciledShiftCount']}\n"
         f"Invalid token: rejected{audit_summary}"
     )
 

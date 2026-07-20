@@ -64,6 +64,9 @@ class SyncDatabase:
                     route_id TEXT NOT NULL,
                     started_at_millis INTEGER NOT NULL,
                     ended_at_millis INTEGER NOT NULL,
+                    expected_cash_cents INTEGER CHECK(expected_cash_cents >= 0),
+                    declared_cash_cents INTEGER CHECK(declared_cash_cents >= 0),
+                    reconciled_at_millis INTEGER,
                     first_request_id TEXT NOT NULL REFERENCES sync_requests(request_id)
                 );
 
@@ -135,6 +138,7 @@ class SyncDatabase:
                     ON authorization_events(occurred_at_millis DESC, id DESC);
                 """
             )
+            self._ensure_shift_reconciliation_columns(connection)
             self._seed_catalog_if_empty(connection)
             connection.commit()
         finally:
@@ -148,6 +152,19 @@ class SyncDatabase:
         finally:
             if should_close:
                 connection.close()
+
+    @staticmethod
+    def _ensure_shift_reconciliation_columns(connection: sqlite3.Connection) -> None:
+        columns = {
+            row["name"] for row in connection.execute("PRAGMA table_info(shifts)").fetchall()
+        }
+        for name, definition in (
+            ("expected_cash_cents", "INTEGER CHECK(expected_cash_cents >= 0)"),
+            ("declared_cash_cents", "INTEGER CHECK(declared_cash_cents >= 0)"),
+            ("reconciled_at_millis", "INTEGER"),
+        ):
+            if name not in columns:
+                connection.execute(f"ALTER TABLE shifts ADD COLUMN {name} {definition}")
 
     def record_authorization_event(
         self,
@@ -377,6 +394,19 @@ class SyncDatabase:
                 LEFT JOIN tickets t ON t.shift_id = s.id
                 """
             ).fetchone()
+            reconciliation = connection.execute(
+                """
+                SELECT
+                    COALESCE(SUM(expected_cash_cents), 0) AS expected_cash_cents,
+                    COALESCE(SUM(declared_cash_cents), 0) AS declared_cash_cents,
+                    COALESCE(SUM(declared_cash_cents - expected_cash_cents), 0) AS variance_cents,
+                    COALESCE(SUM(CASE WHEN reconciled_at_millis IS NOT NULL THEN 1 ELSE 0 END), 0)
+                        AS reconciled_shifts,
+                    COALESCE(SUM(CASE WHEN reconciled_at_millis IS NULL THEN 1 ELSE 0 END), 0)
+                        AS unreconciled_shifts
+                FROM shifts
+                """
+            ).fetchone()
             fares = connection.execute(
                 """
                 SELECT fare_type_id, COUNT(*) AS tickets, SUM(price_cents) AS cash_cents
@@ -403,6 +433,11 @@ class SyncDatabase:
                     "shiftCount": overall["shifts"],
                     "ticketCount": overall["tickets"],
                     "cashTotalCents": overall["cash_cents"],
+                    "expectedCashTotalCents": reconciliation["expected_cash_cents"],
+                    "declaredCashTotalCents": reconciliation["declared_cash_cents"],
+                    "cashVarianceTotalCents": reconciliation["variance_cents"],
+                    "reconciledShiftCount": reconciliation["reconciled_shifts"],
+                    "unreconciledShiftCount": reconciliation["unreconciled_shifts"],
                 },
                 "fares": [
                     {
@@ -437,7 +472,8 @@ class SyncDatabase:
     def _shift_details(self, connection: sqlite3.Connection) -> list:
         shifts = connection.execute(
             """
-            SELECT id, driver_id, bus_id, route_id, started_at_millis, ended_at_millis
+            SELECT id, driver_id, bus_id, route_id, started_at_millis, ended_at_millis,
+                   expected_cash_cents, declared_cash_cents, reconciled_at_millis
             FROM shifts ORDER BY started_at_millis DESC, id
             """
         ).fetchall()
@@ -474,11 +510,34 @@ class SyncDatabase:
                 ),
                 "ticketCount": len(ticket_values),
                 "cashTotalCents": sum(ticket["priceCents"] for ticket in ticket_values),
+                "expectedCashCents": shift["expected_cash_cents"],
+                "declaredCashCents": shift["declared_cash_cents"],
+                "cashVarianceCents": (
+                    shift["declared_cash_cents"] - shift["expected_cash_cents"]
+                    if shift["declared_cash_cents"] is not None
+                    and shift["expected_cash_cents"] is not None
+                    else None
+                ),
+                "cashReconciliationStatus": self._cash_reconciliation_status(shift),
+                "reconciledAtMillis": shift["reconciled_at_millis"],
                 "syncStatus": "SYNCED",
                 "tickets": ticket_values,
             }
             result.append(value)
         return result
+
+    @staticmethod
+    def _cash_reconciliation_status(shift: sqlite3.Row) -> str:
+        expected = shift["expected_cash_cents"]
+        declared = shift["declared_cash_cents"]
+        reconciled_at = shift["reconciled_at_millis"]
+        if expected is None or declared is None or reconciled_at is None:
+            return "NOT_RECORDED"
+        if declared < expected:
+            return "SHORTAGE"
+        if declared > expected:
+            return "SURPLUS"
+        return "MATCHED"
 
     @staticmethod
     def _catalog_response(connection: sqlite3.Connection, metadata) -> Dict[str, Any]:
@@ -603,10 +662,14 @@ class SyncDatabase:
             shift.route_id,
             shift.started_at_millis,
             shift.ended_at_millis,
+            shift.expected_cash_cents,
+            shift.declared_cash_cents,
+            shift.reconciled_at_millis,
         )
         if existing is not None:
             actual = tuple(existing[name] for name in (
-                "driver_id", "bus_id", "route_id", "started_at_millis", "ended_at_millis"
+                "driver_id", "bus_id", "route_id", "started_at_millis", "ended_at_millis",
+                "expected_cash_cents", "declared_cash_cents", "reconciled_at_millis"
             ))
             if actual != expected:
                 raise ContractError("Shift ID already exists with different data", 409)
@@ -615,8 +678,8 @@ class SyncDatabase:
             """
             INSERT INTO shifts(
                 id, driver_id, bus_id, route_id, started_at_millis, ended_at_millis,
-                first_request_id
-            ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                expected_cash_cents, declared_cash_cents, reconciled_at_millis, first_request_id
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (shift.id, *expected, request_id),
         )

@@ -18,7 +18,10 @@ class ProductionTransitSyncClientTest {
         busId = "bus-1",
         routeId = "route-1",
         startedAtMillis = 100L,
-        endedAtMillis = 200L
+        endedAtMillis = 200L,
+        expectedCashCents = 30,
+        declaredCashCents = 25,
+        reconciledAtMillis = 200L
     )
     private val ticket = Ticket(
         id = "ticket-1",
@@ -77,6 +80,9 @@ class ProductionTransitSyncClientTest {
         assertTrue(request.body.contains("\"contractVersion\":1"))
         assertTrue(request.body.contains("\"driverId\":\"driver-1\""))
         assertTrue(request.body.contains("\"fareTypeId\":\"student\""))
+        assertTrue(request.body.contains("\"expectedCashCents\":30"))
+        assertTrue(request.body.contains("\"declaredCashCents\":25"))
+        assertTrue(request.body.contains("\"reconciledAtMillis\":200"))
         assertFalse(request.body.contains("test-token"))
     }
 

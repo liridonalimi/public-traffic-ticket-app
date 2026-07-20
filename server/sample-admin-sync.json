@@ -9,7 +9,10 @@
       "busId": "01-101-KS",
       "routeId": "line-1",
       "startedAtMillis": 1784103000000,
-      "endedAtMillis": 1784106600000
+      "endedAtMillis": 1784106600000,
+      "expectedCashCents": 100,
+      "declaredCashCents": 100,
+      "reconciledAtMillis": 1784106600000
     },
     {
       "id": "shift-admin-002",
@@ -17,7 +20,10 @@
       "busId": "01-318-KS",
       "routeId": "line-2",
       "startedAtMillis": 1784110200000,
-      "endedAtMillis": 1784113800000
+      "endedAtMillis": 1784113800000,
+      "expectedCashCents": 125,
+      "declaredCashCents": 120,
+      "reconciledAtMillis": 1784113800000
     },
     {
       "id": "shift-admin-003",
@@ -25,7 +31,10 @@
       "busId": "01-205-KS",
       "routeId": "line-1",
       "startedAtMillis": 1784104800000,
-      "endedAtMillis": 1784109300000
+      "endedAtMillis": 1784109300000,
+      "expectedCashCents": 80,
+      "declaredCashCents": 85,
+      "reconciledAtMillis": 1784109300000
     },
     {
       "id": "shift-admin-004",
@@ -33,7 +42,10 @@
       "busId": "01-417-KS",
       "routeId": "line-2",
       "startedAtMillis": 1784112000000,
-      "endedAtMillis": 1784117400000
+      "endedAtMillis": 1784117400000,
+      "expectedCashCents": 95,
+      "declaredCashCents": 95,
+      "reconciledAtMillis": 1784117400000
     }
   ],
   "tickets": [

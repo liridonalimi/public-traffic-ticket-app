@@ -3,6 +3,7 @@ from __future__ import annotations
 from io import BytesIO
 import json
 from pathlib import Path
+import sqlite3
 import tempfile
 import unittest
 
@@ -35,6 +36,9 @@ def batch_payload(request_id="sync-0123456789abcdef", price_cents=30):
                 "routeId": "route-001",
                 "startedAtMillis": 100,
                 "endedAtMillis": 300,
+                "expectedCashCents": 30,
+                "declaredCashCents": 25,
+                "reconciledAtMillis": 300,
             }
         ],
         "tickets": [
@@ -104,6 +108,19 @@ class ContractTest(unittest.TestCase):
             with self.assertRaises(ContractError):
                 parse_catalog(invalid)
 
+    def test_cash_reconciliation_is_all_or_none_and_legacy_shifts_remain_valid(self):
+        complete = parse_sync_batch(batch_payload()).shifts[0]
+        legacy = batch_payload()
+        for field in ("expectedCashCents", "declaredCashCents", "reconciledAtMillis"):
+            legacy["shifts"][0].pop(field)
+        partial = batch_payload()
+        partial["shifts"][0]["declaredCashCents"] = None
+
+        self.assertEqual(30, complete.expected_cash_cents)
+        self.assertIsNone(parse_sync_batch(legacy).shifts[0].expected_cash_cents)
+        with self.assertRaises(ContractError):
+            parse_sync_batch(partial)
+
 
 class DatabaseTest(unittest.TestCase):
     def setUp(self):
@@ -126,6 +143,37 @@ class DatabaseTest(unittest.TestCase):
         self.assertEqual(1, restarted_report["overall"]["shiftCount"])
         self.assertEqual(1, restarted_report["overall"]["ticketCount"])
         self.assertEqual(30, restarted_report["overall"]["cashTotalCents"])
+        self.assertEqual(30, restarted_report["overall"]["expectedCashTotalCents"])
+        self.assertEqual(25, restarted_report["overall"]["declaredCashTotalCents"])
+        self.assertEqual(-5, restarted_report["overall"]["cashVarianceTotalCents"])
+        self.assertEqual(1, restarted_report["overall"]["reconciledShiftCount"])
+        self.assertEqual("SHORTAGE", restarted_report["shifts"][0]["cashReconciliationStatus"])
+
+    def test_existing_shift_table_is_migrated_for_reconciliation(self):
+        legacy_path = str(Path(self.temp_directory.name) / "legacy.db")
+        with sqlite3.connect(legacy_path) as connection:
+            connection.execute(
+                """
+                CREATE TABLE shifts (
+                    id TEXT PRIMARY KEY,
+                    driver_id TEXT NOT NULL,
+                    bus_id TEXT NOT NULL,
+                    route_id TEXT NOT NULL,
+                    started_at_millis INTEGER NOT NULL,
+                    ended_at_millis INTEGER NOT NULL,
+                    first_request_id TEXT NOT NULL
+                )
+                """
+            )
+
+        SyncDatabase(legacy_path)
+        with sqlite3.connect(legacy_path) as connection:
+            columns = {row[1] for row in connection.execute("PRAGMA table_info(shifts)")}
+
+        self.assertTrue(
+            {"expected_cash_cents", "declared_cash_cents", "reconciled_at_millis"}
+            <= columns
+        )
 
     def test_same_request_with_changed_payload_conflicts_without_mutation(self):
         self.database.ingest(parse_sync_batch(batch_payload()))
@@ -157,6 +205,14 @@ class DatabaseTest(unittest.TestCase):
         self.assertEqual(4, report["overall"]["shiftCount"])
         self.assertEqual(12, report["overall"]["ticketCount"])
         self.assertEqual(400, report["overall"]["cashTotalCents"])
+        self.assertEqual(400, report["overall"]["expectedCashTotalCents"])
+        self.assertEqual(400, report["overall"]["declaredCashTotalCents"])
+        self.assertEqual(0, report["overall"]["cashVarianceTotalCents"])
+        self.assertEqual(4, report["overall"]["reconciledShiftCount"])
+        self.assertEqual(
+            {"MATCHED", "SHORTAGE", "SURPLUS"},
+            {shift["cashReconciliationStatus"] for shift in report["shifts"]},
+        )
 
     def test_catalog_is_seeded_replaced_atomically_and_versioned(self):
         initial = self.database.catalog()
@@ -294,6 +350,9 @@ class ApplicationTest(unittest.TestCase):
         self.assertIn(b"Operations catalog", html)
         self.assertIn(b"Publish catalog", html)
         self.assertIn(b"Authorization", javascript)
+        self.assertIn(b"metric-cash-variance", html)
+        self.assertIn(b"cashReconciliationStatus", javascript)
+        self.assertIn(b"Cash handover", javascript)
         self.assertNotIn(b"localStorage", javascript)
         self.assertNotIn(b"sessionStorage", javascript)
         self.assertNotIn(TOKEN.encode("utf-8"), html + css + javascript)
@@ -424,6 +483,10 @@ class ApplicationTest(unittest.TestCase):
         self.assertEqual(1, report["overall"]["shiftCount"])
         self.assertEqual(1, report["overall"]["ticketCount"])
         self.assertEqual(30, report["overall"]["cashTotalCents"])
+        self.assertEqual(30, report["overall"]["expectedCashTotalCents"])
+        self.assertEqual(25, report["overall"]["declaredCashTotalCents"])
+        self.assertEqual(-5, report["overall"]["cashVarianceTotalCents"])
+        self.assertEqual("SHORTAGE", report["shifts"][0]["cashReconciliationStatus"])
         self.assertEqual("student", report["fares"][0]["fareTypeId"])
         self.assertEqual(["shift-1"], report["drivers"][0]["shiftIds"])
         self.assertEqual("SYNCED", report["shifts"][0]["syncStatus"])
