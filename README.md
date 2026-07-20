@@ -83,6 +83,19 @@ It currently includes:
 20. Centrally managed drivers, buses, routes, stops, and fares - complete
 21. Production access boundaries and role-scoped administration - complete
 22. Credential rotation and authorization auditability - complete
+23. Shift cash reconciliation and handover - planned
+24. Scheduled trips and driver/vehicle assignments - planned
+25. Fare policy engine for zones, time rules, and transfers - planned
+26. Controlled ticket voids, corrections, and reprints - planned
+27. Verifiable QR tickets and inspector validation - planned
+28. Operational analytics and accountable exports - planned
+29. GTFS Schedule import/export and data-quality validation - planned
+30. Passenger accessibility, announcements, and service alerts - planned
+31. Vehicle positions and live operations supervision - planned
+32. Device enrollment, configuration, and fleet health - planned
+33. Payment-method abstraction and cashless readiness - planned
+34. Multi-operator and depot separation - planned
+35. Privacy, security, recovery, and production release assurance - planned
 
 ## Documentation
 
@@ -110,6 +123,7 @@ Presentation documentation:
 - English: `docs/EN/20-central-operations-catalog.md`
 - English: `docs/EN/21-role-scoped-production-access.md`
 - English: `docs/EN/22-credential-rotation-and-authorization-audit.md`
+- English product roadmap: `docs/EN/PRODUCT_ROADMAP.md`
 - Albanian: `docs/SQ/01-themeli-i-projektit-dhe-skeleti-android.md`
 - Albanian: `docs/SQ/02-rrjedha-e-turnit-te-shoferit.md`
 - Albanian: `docs/SQ/03-ruajtja-lokale-e-biletave.md`
@@ -132,6 +146,7 @@ Presentation documentation:
 - Albanian: `docs/SQ/20-katalogu-qendror-i-operacioneve.md`
 - Albanian: `docs/SQ/21-qasja-ne-prodhim-sipas-roleve.md`
 - Albanian: `docs/SQ/22-rotacioni-i-kredencialeve-dhe-auditimi-i-qasjes.md`
+- Albanian product roadmap: `docs/SQ/UDHERREFYESI_I_PRODUKTIT.md`
 
 Technical documentation:
 
@@ -157,13 +172,11 @@ Technical documentation:
 - `docs/TECHNICAL/20-central-operations-catalog.md`
 - `docs/TECHNICAL/21-role-scoped-production-access.md`
 - `docs/TECHNICAL/22-credential-rotation-and-authorization-audit.md`
+- Product roadmap: `docs/TECHNICAL/PRODUCT_ROADMAP.md`
 
-## Next build milestone
+## Product roadmap
 
-Client-readiness continues with:
-
-1. Select hosting infrastructure and activate the already prepared staging release gate when a domain and accountable operator are available.
-2. Integrate the role boundary and tested rotation protocol with the selected production identity provider.
+The next product-focused phase is defined in `docs/EN/PRODUCT_ROADMAP.md`. Module 23 starts with shift cash reconciliation and handover. Modules 23–34 remain provider-neutral and can be implemented and independently validated locally. Module 35 consolidates privacy, security, recovery, and release assurance; its final hosted activation remains conditional on infrastructure, domain, accountable operators, and an identity provider.
 
 #######################################
 
@@ -252,10 +265,20 @@ Aktualisht përfshin:
 20. Menaxhimi qendror i shoferëve, autobusëve, linjave, ndalesave dhe tarifave - përfunduar
 21. Kufijtë e qasjes në prodhim dhe administrimi sipas roleve - përfunduar
 22. Rotacioni i kredencialeve dhe auditimi i autorizimit - përfunduar
+23. Rakordimi dhe dorëzimi i arkës së turnit - planifikuar
+24. Udhëtimet e planifikuara dhe caktimi i shoferit/mjetit - planifikuar
+25. Motori i politikave të tarifave për zona, kohë dhe transferta - planifikuar
+26. Anulimi, korrigjimi dhe riprintimi i kontrolluar i biletave - planifikuar
+27. Biletat QR të verifikueshme dhe validimi nga kontrollori - planifikuar
+28. Analitika operative dhe eksportet e gjurmueshme - planifikuar
+29. Importi/eksporti GTFS Schedule dhe kontrolli i cilësisë - planifikuar
+30. Qasshmëria e pasagjerëve, njoftimet dhe alarmet e shërbimit - planifikuar
+31. Pozicioni i mjeteve dhe mbikëqyrja operative live - planifikuar
+32. Regjistrimi, konfigurimi dhe gjendja e flotës së pajisjeve - planifikuar
+33. Abstraksioni i mënyrave të pagesës dhe gatishmëria pa para të gatshme - planifikuar
+34. Ndarja sipas operatorëve dhe depove - planifikuar
+35. Privatësia, siguria, rikuperimi dhe gatishmëria për publikim - planifikuar
 
-## Pika e ndërtimit tjetër
+## Udhërrëfyesi i produktit
 
-Gatishmëria për klientin vazhdon me:
-
-1. Zgjidhni infrastrukturën dhe aktivizoni kontrollin staging tashmë të përgatitur kur të ketë domain dhe operator përgjegjës.
-2. Lidhni kufirin e roleve dhe protokollin e testuar të rotacionit me ofruesin e zgjedhur të identitetit.
+Faza e ardhshme e fokusuar në produkt përcaktohet në `docs/SQ/UDHERREFYESI_I_PRODUKTIT.md`. Moduli 23 fillon me rakordimin dhe dorëzimin e arkës së turnit. Modulet 23–34 mbeten të pavarura nga ofruesi dhe mund të implementohen e validohen lokalisht. Moduli 35 bashkon privatësinë, sigurinë, rikuperimin dhe gatishmërinë për publikim; aktivizimi përfundimtar në hosting pret infrastrukturën, domain-in, operatorët përgjegjës dhe ofruesin e identitetit.
