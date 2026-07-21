@@ -58,6 +58,12 @@ class TicketInput:
     fare_type_id: str
     price_cents: int
     sold_at_millis: int
+    fare_policy_revision: int | None
+    origin_stop_id: str | None
+    destination_stop_id: str | None
+    zone_count: int | None
+    off_peak_applied: bool | None
+    transfer_valid_until_millis: int | None
 
     def canonical(self) -> Dict[str, Any]:
         return {
@@ -66,6 +72,12 @@ class TicketInput:
             "fareTypeId": self.fare_type_id,
             "priceCents": self.price_cents,
             "soldAtMillis": self.sold_at_millis,
+            "farePolicyRevision": self.fare_policy_revision,
+            "originStopId": self.origin_stop_id,
+            "destinationStopId": self.destination_stop_id,
+            "zoneCount": self.zone_count,
+            "offPeakApplied": self.off_peak_applied,
+            "transferValidUntilMillis": self.transfer_valid_until_millis,
         }
 
 
@@ -112,6 +124,7 @@ class CatalogStopInput:
     latitude: float
     longitude: float
     order: int
+    zone_id: str
 
 
 @dataclass(frozen=True)
@@ -120,6 +133,12 @@ class CatalogFareInput:
     name: str
     price_cents: int
     eligibility: str | None
+    additional_zone_cents: int
+    off_peak_discount_cents: int
+    off_peak_start_minutes: int | None
+    off_peak_end_minutes: int | None
+    transfer_window_minutes: int
+    route_id: str | None
 
 
 @dataclass(frozen=True)
@@ -237,6 +256,13 @@ def parse_catalog(payload: Any) -> CatalogInput:
     routes_with_stops = {stop.route_id for stop in stops}
     if route_ids != routes_with_stops:
         raise ContractError("Every route must contain at least one stop")
+    if any(fare.route_id is not None and fare.route_id not in route_ids for fare in fares):
+        raise ContractError("Every route-specific fare must reference a route in this catalog")
+    if any(
+        not any(fare.route_id is None or fare.route_id == route_id for fare in fares)
+        for route_id in route_ids
+    ):
+        raise ContractError("Every route must have at least one applicable fare")
 
     calendar_by_id = {value.id: value for value in calendars}
     trip_by_id = {value.id: value for value in trips}
@@ -386,6 +412,7 @@ def _parse_catalog_stop(value: Any) -> CatalogStopInput:
         latitude=latitude,
         longitude=longitude,
         order=_required_integer(value, "order", minimum=1, maximum=10_000),
+        zone_id=_optional_string(value, "zoneId", maximum=40) or "1",
     )
 
 
@@ -396,11 +423,23 @@ def _parse_catalog_fare(value: Any) -> CatalogFareInput:
         if not isinstance(eligibility, str) or len(eligibility) > 300:
             raise ContractError("Field eligibility must be a string or null")
         eligibility = eligibility.strip() or None
+    off_peak_start = _optional_integer(value, "offPeakStartMinutes", minimum=0, maximum=1_439)
+    off_peak_end = _optional_integer(value, "offPeakEndMinutes", minimum=0, maximum=1_439)
+    if (off_peak_start is None) != (off_peak_end is None):
+        raise ContractError("Off-peak start and end times must both be set or both be empty")
+    if off_peak_start is not None and off_peak_start == off_peak_end:
+        raise ContractError("Off-peak start and end times must be different")
     return CatalogFareInput(
         id=_required_string(value, "id", maximum=80),
         name=_required_string(value, "name", maximum=160),
         price_cents=_required_integer(value, "priceCents", minimum=0, maximum=100_000),
         eligibility=eligibility,
+        additional_zone_cents=_optional_integer(value, "additionalZoneCents", minimum=0, maximum=100_000) or 0,
+        off_peak_discount_cents=_optional_integer(value, "offPeakDiscountCents", minimum=0, maximum=100_000) or 0,
+        off_peak_start_minutes=off_peak_start,
+        off_peak_end_minutes=off_peak_end,
+        transfer_window_minutes=_optional_integer(value, "transferWindowMinutes", minimum=0, maximum=1_440) or 0,
+        route_id=_optional_string(value, "routeId", maximum=80),
     )
 
 
@@ -435,12 +474,32 @@ def _parse_shift(value: Any) -> ShiftInput:
 def _parse_ticket(value: Any) -> TicketInput:
     if not isinstance(value, dict):
         raise ContractError("Every ticket must be a JSON object")
+    sold_at = _required_integer(value, "soldAtMillis", minimum=0)
+    revision = _optional_integer(value, "farePolicyRevision", minimum=1)
+    origin = _optional_string(value, "originStopId", maximum=80)
+    destination = _optional_string(value, "destinationStopId", maximum=80)
+    zone_count = _optional_integer(value, "zoneCount", minimum=1, maximum=1_000)
+    off_peak = _optional_boolean(value, "offPeakApplied")
+    transfer_valid_until = _optional_integer(
+        value, "transferValidUntilMillis", minimum=sold_at
+    )
+    snapshot = (revision, origin, destination, zone_count, off_peak)
+    if any(item is None for item in snapshot) and any(item is not None for item in snapshot):
+        raise ContractError("Ticket fare policy snapshot fields must be supplied together")
+    if transfer_valid_until is not None and revision is None:
+        raise ContractError("Transfer validity requires a ticket fare policy snapshot")
     return TicketInput(
         id=_required_string(value, "id"),
         shift_id=_required_string(value, "shiftId"),
         fare_type_id=_required_string(value, "fareTypeId"),
         price_cents=_required_integer(value, "priceCents", minimum=0, maximum=100_000),
-        sold_at_millis=_required_integer(value, "soldAtMillis", minimum=0),
+        sold_at_millis=sold_at,
+        fare_policy_revision=revision,
+        origin_stop_id=origin,
+        destination_stop_id=destination,
+        zone_count=zone_count,
+        off_peak_applied=off_peak,
+        transfer_valid_until_millis=transfer_valid_until,
     )
 
 
@@ -471,6 +530,15 @@ def _optional_string(value: Dict[str, Any], name: str, maximum: int = 200) -> st
         return None
     if not isinstance(result, str) or not result or len(result) > maximum:
         raise ContractError(f"Field {name} must be null or a nonempty string")
+    return result
+
+
+def _optional_boolean(value: Dict[str, Any], name: str) -> bool | None:
+    result = value.get(name)
+    if result is None:
+        return None
+    if not isinstance(result, bool):
+        raise ContractError(f"Field {name} must be a boolean or null")
     return result
 
 

@@ -248,6 +248,18 @@ private fun SyncBatch.toContractJson(sentAtMillis: Long): String = buildString {
         appendJsonNumber("priceCents", ticket.priceCents)
         append(',')
         appendJsonNumber("soldAtMillis", ticket.soldAtMillis)
+        append(',')
+        appendJsonNullableNumber("farePolicyRevision", ticket.farePolicyRevision)
+        append(',')
+        appendJsonNullableString("originStopId", ticket.originStopId)
+        append(',')
+        appendJsonNullableString("destinationStopId", ticket.destinationStopId)
+        append(',')
+        appendJsonNullableNumber("zoneCount", ticket.zoneCount)
+        append(',')
+        appendJsonNullableBoolean("offPeakApplied", ticket.offPeakApplied)
+        append(',')
+        appendJsonNullableNumber("transferValidUntilMillis", ticket.transferValidUntilMillis)
         append('}')
     }
     append("]}")
@@ -260,6 +272,11 @@ private fun StringBuilder.appendJsonString(name: String, value: String) {
 private fun StringBuilder.appendJsonNullableString(name: String, value: String?) {
     append('"').append(name).append("\":")
     if (value == null) append("null") else append('"').append(value.jsonEscaped()).append('"')
+}
+
+private fun StringBuilder.appendJsonNullableBoolean(name: String, value: Boolean?) {
+    append('"').append(name).append("\":")
+    if (value == null) append("null") else append(value)
 }
 
 private fun StringBuilder.appendJsonNumber(name: String, value: Number) {

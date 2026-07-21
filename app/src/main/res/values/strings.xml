@@ -50,6 +50,11 @@
     <string name="cash_total">Totali në para të gatshme</string>
     <string name="ticket_fare">Tarifa e biletës</string>
     <string name="select_fare">Zgjidhni tarifën</string>
+    <string name="ticket_destination">Destinacioni i biletës</string>
+    <string name="select_destination">Zgjidhni destinacionin</string>
+    <string name="fare_quote_zones">Udhëtimi përfshin %1$d zona</string>
+    <string name="fare_quote_off_peak">U aplikua zbritja jashtë orarit të pikut</string>
+    <string name="fare_quote_transfer">Përfshin transfer brenda %1$d minutash</string>
     <string name="sales_by_fare">Shitjet sipas tarifës</string>
     <string name="fare_summary">%1$s: %2$d / %3$s</string>
     <string name="synchronization">Sinkronizimi</string>

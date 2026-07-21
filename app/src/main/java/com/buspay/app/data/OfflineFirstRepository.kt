@@ -183,6 +183,7 @@ class OfflineFirstRepository(context: Context) {
                                             .put("latitude", stop.latitude)
                                             .put("longitude", stop.longitude)
                                             .put("order", stop.order)
+                                            .put("zoneId", stop.zoneId)
                                     )
                                 }
                             })
@@ -197,6 +198,12 @@ class OfflineFirstRepository(context: Context) {
                             .put("name", fare.name)
                             .put("priceCents", fare.priceCents)
                             .put("eligibility", fare.eligibility)
+                            .put("additionalZoneCents", fare.additionalZoneCents)
+                            .put("offPeakDiscountCents", fare.offPeakDiscountCents)
+                            .put("offPeakStartMinutes", fare.offPeakStartMinutes)
+                            .put("offPeakEndMinutes", fare.offPeakEndMinutes)
+                            .put("transferWindowMinutes", fare.transferWindowMinutes)
+                            .put("routeId", fare.routeId)
                     )
                 }
             })
@@ -311,6 +318,12 @@ class OfflineFirstRepository(context: Context) {
             .put("printStatus", printStatus.name)
             .put("printAttempts", printAttempts)
             .put("lastPrintError", lastPrintError)
+            .put("farePolicyRevision", farePolicyRevision)
+            .put("originStopId", originStopId)
+            .put("destinationStopId", destinationStopId)
+            .put("zoneCount", zoneCount)
+            .put("offPeakApplied", offPeakApplied)
+            .put("transferValidUntilMillis", transferValidUntilMillis)
     }
 
     private companion object {
@@ -375,7 +388,14 @@ class OfflineFirstRepository(context: Context) {
                     null
                 } else {
                     json.optString("lastPrintError").takeIf(String::isNotBlank)
-                }
+                },
+                farePolicyRevision = json.optionalInt("farePolicyRevision"),
+                originStopId = json.optionalString("originStopId"),
+                destinationStopId = json.optionalString("destinationStopId"),
+                zoneCount = json.optionalInt("zoneCount"),
+                offPeakApplied = if (json.isNull("offPeakApplied")) null
+                    else json.optBoolean("offPeakApplied"),
+                transferValidUntilMillis = json.optionalLong("transferValidUntilMillis")
             )
         }
 
@@ -418,7 +438,8 @@ class OfflineFirstRepository(context: Context) {
                             name = stop.getString("name"),
                             latitude = stop.getDouble("latitude"),
                             longitude = stop.getDouble("longitude"),
-                            order = stop.getInt("order")
+                            order = stop.getInt("order"),
+                            zoneId = stop.optString("zoneId", "1")
                         )
                     }.sortedBy(Stop::order)
                 )
@@ -428,7 +449,13 @@ class OfflineFirstRepository(context: Context) {
                     id = value.getString("id"),
                     name = value.getString("name"),
                     priceCents = value.getInt("priceCents"),
-                    eligibility = if (value.isNull("eligibility")) null else value.getString("eligibility")
+                    eligibility = if (value.isNull("eligibility")) null else value.getString("eligibility"),
+                    additionalZoneCents = value.optInt("additionalZoneCents", 0),
+                    offPeakDiscountCents = value.optInt("offPeakDiscountCents", 0),
+                    offPeakStartMinutes = value.optionalInt("offPeakStartMinutes"),
+                    offPeakEndMinutes = value.optionalInt("offPeakEndMinutes"),
+                    transferWindowMinutes = value.optInt("transferWindowMinutes", 0),
+                    routeId = value.optionalString("routeId")
                 )
             }
             val calendars = json.optJSONArray("serviceCalendars")?.mapObjects { value ->

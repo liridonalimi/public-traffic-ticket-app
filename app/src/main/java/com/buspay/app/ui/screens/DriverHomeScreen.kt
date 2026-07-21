@@ -68,6 +68,7 @@ import com.buspay.app.domain.CashReconciliationStatus
 import com.buspay.app.domain.Driver
 import com.buspay.app.domain.DriverDuty
 import com.buspay.app.domain.FareType
+import com.buspay.app.domain.Stop
 import com.buspay.app.domain.Route
 import com.buspay.app.domain.ReportingSyncStatus
 import com.buspay.app.domain.parseEuroAmountToCents
@@ -497,12 +498,22 @@ fun DriverHomeScreen(viewModel: DriverShiftViewModel = viewModel()) {
                     if (state.isShiftActive) {
                         Spacer(modifier = Modifier.height(20.dp))
                         SelectorCard(
+                            title = stringResource(R.string.ticket_destination),
+                            selectedText = state.selectedDestinationStop?.name
+                                ?: stringResource(R.string.select_destination),
+                            enabled = state.availableDestinationStops.isNotEmpty(),
+                            items = state.availableDestinationStops,
+                            itemText = Stop::name,
+                            onItemSelected = viewModel::selectDestinationStop
+                        )
+                        Spacer(modifier = Modifier.height(12.dp))
+                        SelectorCard(
                             title = stringResource(R.string.ticket_fare),
                             selectedText = state.selectedFareType?.let {
-                                "${it.name} - ${formatEuroCents(it.priceCents)}"
+                                "${it.name} - ${formatEuroCents(state.fareQuote?.priceCents ?: it.priceCents)}"
                             } ?: stringResource(R.string.select_fare),
                             enabled = true,
-                            items = state.fareTypes,
+                            items = state.applicableFareTypes,
                             itemText = { fare: FareType ->
                                 "${fare.name} - ${formatEuroCents(fare.priceCents)}"
                             },
@@ -514,6 +525,33 @@ fun DriverHomeScreen(viewModel: DriverShiftViewModel = viewModel()) {
                                 text = eligibility,
                                 style = MaterialTheme.typography.bodySmall
                             )
+                        }
+                        state.fareQuote?.let { quote ->
+                            Spacer(modifier = Modifier.height(6.dp))
+                            Text(
+                                text = stringResource(
+                                    R.string.fare_quote_zones,
+                                    quote.zoneCount
+                                ),
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                            if (quote.offPeakApplied) {
+                                Text(
+                                    text = stringResource(R.string.fare_quote_off_peak),
+                                    style = MaterialTheme.typography.bodySmall
+                                )
+                            }
+                            state.selectedFareType?.transferWindowMinutes
+                                ?.takeIf { it > 0 }
+                                ?.let { minutes ->
+                                    Text(
+                                        text = stringResource(
+                                            R.string.fare_quote_transfer,
+                                            minutes
+                                        ),
+                                        style = MaterialTheme.typography.bodySmall
+                                    )
+                                }
                         }
                     }
 

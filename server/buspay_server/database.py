@@ -78,6 +78,12 @@ class SyncDatabase:
                     fare_type_id TEXT NOT NULL,
                     price_cents INTEGER NOT NULL CHECK(price_cents >= 0),
                     sold_at_millis INTEGER NOT NULL,
+                    fare_policy_revision INTEGER,
+                    origin_stop_id TEXT,
+                    destination_stop_id TEXT,
+                    zone_count INTEGER,
+                    off_peak_applied INTEGER,
+                    transfer_valid_until_millis INTEGER,
                     first_request_id TEXT NOT NULL REFERENCES sync_requests(request_id)
                 );
 
@@ -113,6 +119,7 @@ class SyncDatabase:
                     latitude REAL NOT NULL,
                     longitude REAL NOT NULL,
                     stop_order INTEGER NOT NULL,
+                    zone_id TEXT NOT NULL DEFAULT '1',
                     UNIQUE(route_id, stop_order)
                 );
 
@@ -120,7 +127,13 @@ class SyncDatabase:
                     id TEXT PRIMARY KEY,
                     name TEXT NOT NULL,
                     price_cents INTEGER NOT NULL CHECK(price_cents >= 0),
-                    eligibility TEXT
+                    eligibility TEXT,
+                    additional_zone_cents INTEGER NOT NULL DEFAULT 0,
+                    off_peak_discount_cents INTEGER NOT NULL DEFAULT 0,
+                    off_peak_start_minutes INTEGER,
+                    off_peak_end_minutes INTEGER,
+                    transfer_window_minutes INTEGER NOT NULL DEFAULT 0,
+                    route_id TEXT
                 );
 
                 CREATE TABLE IF NOT EXISTS catalog_service_calendars (
@@ -175,6 +188,8 @@ class SyncDatabase:
                 """
             )
             self._ensure_shift_optional_columns(connection)
+            self._ensure_ticket_policy_columns(connection)
+            self._ensure_catalog_policy_columns(connection)
             self._seed_catalog_if_empty(connection)
             self._seed_schedule_if_empty(connection)
             connection.commit()
@@ -204,6 +219,36 @@ class SyncDatabase:
         ):
             if name not in columns:
                 connection.execute(f"ALTER TABLE shifts ADD COLUMN {name} {definition}")
+
+    @staticmethod
+    def _ensure_catalog_policy_columns(connection: sqlite3.Connection) -> None:
+        definitions = {
+            "catalog_stops": (("zone_id", "TEXT NOT NULL DEFAULT '1'"),),
+            "catalog_fares": (
+                ("additional_zone_cents", "INTEGER NOT NULL DEFAULT 0"),
+                ("off_peak_discount_cents", "INTEGER NOT NULL DEFAULT 0"),
+                ("off_peak_start_minutes", "INTEGER"),
+                ("off_peak_end_minutes", "INTEGER"),
+                ("transfer_window_minutes", "INTEGER NOT NULL DEFAULT 0"),
+                ("route_id", "TEXT"),
+            ),
+        }
+        for table, additions in definitions.items():
+            columns = {row["name"] for row in connection.execute(f"PRAGMA table_info({table})").fetchall()}
+            for name, definition in additions:
+                if name not in columns:
+                    connection.execute(f"ALTER TABLE {table} ADD COLUMN {name} {definition}")
+
+    @staticmethod
+    def _ensure_ticket_policy_columns(connection: sqlite3.Connection) -> None:
+        columns = {row["name"] for row in connection.execute("PRAGMA table_info(tickets)").fetchall()}
+        for name, definition in (
+            ("fare_policy_revision", "INTEGER"), ("origin_stop_id", "TEXT"),
+            ("destination_stop_id", "TEXT"), ("zone_count", "INTEGER"),
+            ("off_peak_applied", "INTEGER"), ("transfer_valid_until_millis", "INTEGER"),
+        ):
+            if name not in columns:
+                connection.execute(f"ALTER TABLE tickets ADD COLUMN {name} {definition}")
 
     def record_authorization_event(
         self,
@@ -382,8 +427,8 @@ class SyncDatabase:
             )
             connection.executemany(
                 """
-                INSERT INTO catalog_stops(id, route_id, name, latitude, longitude, stop_order)
-                VALUES (?, ?, ?, ?, ?, ?)
+                INSERT INTO catalog_stops(id, route_id, name, latitude, longitude, stop_order, zone_id)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
                 """,
                 [
                     (
@@ -393,14 +438,22 @@ class SyncDatabase:
                         value.latitude,
                         value.longitude,
                         value.order,
+                        value.zone_id,
                     )
                     for value in catalog.stops
                 ],
             )
             connection.executemany(
-                "INSERT INTO catalog_fares(id, name, price_cents, eligibility) VALUES (?, ?, ?, ?)",
+                """INSERT INTO catalog_fares(
+                    id, name, price_cents, eligibility, additional_zone_cents,
+                    off_peak_discount_cents, off_peak_start_minutes, off_peak_end_minutes,
+                    transfer_window_minutes, route_id
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 [
-                    (value.id, value.name, value.price_cents, value.eligibility)
+                    (value.id, value.name, value.price_cents, value.eligibility,
+                     value.additional_zone_cents, value.off_peak_discount_cents,
+                     value.off_peak_start_minutes, value.off_peak_end_minutes,
+                     value.transfer_window_minutes, value.route_id)
                     for value in catalog.fares
                 ],
             )
@@ -581,7 +634,9 @@ class SyncDatabase:
         for shift in shifts:
             tickets = connection.execute(
                 """
-                SELECT id, shift_id, fare_type_id, price_cents, sold_at_millis
+                SELECT id, shift_id, fare_type_id, price_cents, sold_at_millis,
+                       fare_policy_revision, origin_stop_id, destination_stop_id,
+                       zone_count, off_peak_applied, transfer_valid_until_millis
                 FROM tickets WHERE shift_id = ? ORDER BY sold_at_millis, id
                 """,
                 (shift["id"],),
@@ -594,6 +649,12 @@ class SyncDatabase:
                     "priceCents": ticket["price_cents"],
                     "soldAtMillis": ticket["sold_at_millis"],
                     "synced": True,
+                    "farePolicyRevision": ticket["fare_policy_revision"],
+                    "originStopId": ticket["origin_stop_id"],
+                    "destinationStopId": ticket["destination_stop_id"],
+                    "zoneCount": ticket["zone_count"],
+                    "offPeakApplied": None if ticket["off_peak_applied"] is None else bool(ticket["off_peak_applied"]),
+                    "transferValidUntilMillis": ticket["transfer_valid_until_millis"],
                 }
                 for ticket in tickets
             ]
@@ -654,12 +715,14 @@ class SyncDatabase:
         ).fetchall()
         stops = connection.execute(
             """
-            SELECT id, route_id, name, latitude, longitude, stop_order
+            SELECT id, route_id, name, latitude, longitude, stop_order, zone_id
             FROM catalog_stops ORDER BY route_id, stop_order, id
             """
         ).fetchall()
         fares = connection.execute(
-            "SELECT id, name, price_cents, eligibility FROM catalog_fares ORDER BY price_cents DESC, id"
+            """SELECT id, name, price_cents, eligibility, additional_zone_cents,
+                off_peak_discount_cents, off_peak_start_minutes, off_peak_end_minutes,
+                transfer_window_minutes, route_id FROM catalog_fares ORDER BY price_cents DESC, id"""
         ).fetchall()
         calendars = connection.execute(
             """
@@ -697,6 +760,7 @@ class SyncDatabase:
                     "latitude": row["latitude"],
                     "longitude": row["longitude"],
                     "order": row["stop_order"],
+                    "zoneId": row["zone_id"],
                 }
                 for row in stops
             ],
@@ -706,6 +770,12 @@ class SyncDatabase:
                     "name": row["name"],
                     "priceCents": row["price_cents"],
                     "eligibility": row["eligibility"],
+                    "additionalZoneCents": row["additional_zone_cents"],
+                    "offPeakDiscountCents": row["off_peak_discount_cents"],
+                    "offPeakStartMinutes": row["off_peak_start_minutes"],
+                    "offPeakEndMinutes": row["off_peak_end_minutes"],
+                    "transferWindowMinutes": row["transfer_window_minutes"],
+                    "routeId": row["route_id"],
                 }
                 for row in fares
             ],
@@ -928,10 +998,15 @@ class SyncDatabase:
         if shift_exists is None:
             raise ContractError("Ticket references an unknown shift", 409)
         existing = connection.execute("SELECT * FROM tickets WHERE id = ?", (ticket.id,)).fetchone()
-        expected = (ticket.shift_id, ticket.fare_type_id, ticket.price_cents, ticket.sold_at_millis)
+        expected = (ticket.shift_id, ticket.fare_type_id, ticket.price_cents, ticket.sold_at_millis,
+                    ticket.fare_policy_revision, ticket.origin_stop_id, ticket.destination_stop_id,
+                    ticket.zone_count, None if ticket.off_peak_applied is None else int(ticket.off_peak_applied),
+                    ticket.transfer_valid_until_millis)
         if existing is not None:
             actual = tuple(existing[name] for name in (
-                "shift_id", "fare_type_id", "price_cents", "sold_at_millis"
+                "shift_id", "fare_type_id", "price_cents", "sold_at_millis",
+                "fare_policy_revision", "origin_stop_id", "destination_stop_id",
+                "zone_count", "off_peak_applied", "transfer_valid_until_millis"
             ))
             if actual != expected:
                 raise ContractError("Ticket ID already exists with different data", 409)
@@ -939,8 +1014,10 @@ class SyncDatabase:
         connection.execute(
             """
             INSERT INTO tickets(
-                id, shift_id, fare_type_id, price_cents, sold_at_millis, first_request_id
-            ) VALUES (?, ?, ?, ?, ?, ?)
+                id, shift_id, fare_type_id, price_cents, sold_at_millis,
+                fare_policy_revision, origin_stop_id, destination_stop_id, zone_count,
+                off_peak_applied, transfer_valid_until_millis, first_request_id
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (ticket.id, *expected, request_id),
         )

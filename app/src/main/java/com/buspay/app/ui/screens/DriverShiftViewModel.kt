@@ -31,6 +31,7 @@ import com.buspay.app.domain.Driver
 import com.buspay.app.domain.DriverDuty
 import com.buspay.app.domain.DriverShiftSummary
 import com.buspay.app.domain.FareType
+import com.buspay.app.domain.FareQuote
 import com.buspay.app.domain.ManagedCatalog
 import com.buspay.app.domain.Route
 import com.buspay.app.domain.RouteProgress
@@ -38,12 +39,14 @@ import com.buspay.app.domain.RouteProgressSource
 import com.buspay.app.domain.RouteStopStatus
 import com.buspay.app.domain.Shift
 import com.buspay.app.domain.StopRequest
+import com.buspay.app.domain.Stop
 import com.buspay.app.domain.SyncResult
 import com.buspay.app.domain.Ticket
 import com.buspay.app.domain.TicketPrintStatus
 import com.buspay.app.domain.createSyncBatch
 import com.buspay.app.domain.dutiesForDriver
 import com.buspay.app.domain.buildAdminReport
+import com.buspay.app.domain.calculateFareQuote
 import com.buspay.app.domain.isStopRequestReached
 import com.buspay.app.domain.nearestForwardStopIndex
 import com.buspay.app.domain.routeStopStatus
@@ -52,6 +55,7 @@ import com.buspay.app.domain.isOperationallyValid
 import kotlinx.coroutines.launch
 import java.text.DateFormat
 import java.util.Date
+import java.util.Calendar
 import java.util.UUID
 
 data class DriverShiftUiState(
@@ -72,6 +76,7 @@ data class DriverShiftUiState(
     val stopRequestMessage: String? = null,
     val fareTypes: List<FareType> = emptyList(),
     val selectedFareType: FareType? = null,
+    val selectedDestinationStop: Stop? = null,
     val pairedPrinters: List<PrinterDevice> = emptyList(),
     val selectedPrinter: PrinterDevice? = null,
     val isPrinting: Boolean = false,
@@ -121,6 +126,30 @@ data class DriverShiftUiState(
     }
     val ticketCount: Int = tickets.size
     val cashTotalCents: Int = tickets.sumOf { it.priceCents }
+    val orderedRouteStops: List<Stop> = selectedRoute?.stops?.sortedBy(Stop::order).orEmpty()
+    val availableDestinationStops: List<Stop> = orderedRouteStops.drop(
+        ((routeProgress?.currentStopIndex ?: 0) + 1).coerceAtMost(orderedRouteStops.size)
+    )
+    val fareQuote: FareQuote? = selectedFareType?.let { fare ->
+        val route = selectedRoute ?: return@let null
+        val origin = orderedRouteStops.getOrNull(routeProgress?.currentStopIndex ?: 0)
+            ?: return@let null
+        val destination = selectedDestinationStop ?: availableDestinationStops.lastOrNull()
+            ?: return@let null
+        val now = System.currentTimeMillis()
+        val calendar = Calendar.getInstance().apply { timeInMillis = now }
+        calculateFareQuote(
+            fareType = fare,
+            route = route,
+            originStop = origin,
+            destinationStop = destination,
+            soldAtMillis = now,
+            minuteOfDay = calendar.get(Calendar.HOUR_OF_DAY) * 60 + calendar.get(Calendar.MINUTE)
+        )
+    }
+
+    val applicableFareTypes: List<FareType>
+        get() = fareTypes.filter { it.routeId == null || it.routeId == selectedRoute?.id }
     val fareTypeSummaries = summarizeTicketsByFare(tickets, fareTypes)
     val unprintedTickets: List<Ticket> = tickets.filter {
         it.printStatus != TicketPrintStatus.PRINTED
@@ -188,6 +217,8 @@ class DriverShiftViewModel(application: Application) : AndroidViewModel(applicat
                 selectedDuty = duty,
                 selectedBus = duty.bus,
                 selectedRoute = duty.route,
+                selectedFareType = uiState.fareTypes.firstOrNull { it.routeId == null || it.routeId == duty.route.id },
+                selectedDestinationStop = duty.route.stops.maxByOrNull(Stop::order),
                 lastClosedSummary = null
             )
         }
@@ -200,12 +231,22 @@ class DriverShiftViewModel(application: Application) : AndroidViewModel(applicat
 
     fun selectRoute(route: Route) {
         if (uiState.isShiftActive || uiState.selectedDuty != null) return
-        uiState = uiState.copy(selectedRoute = route, lastClosedSummary = null)
+        uiState = uiState.copy(
+            selectedRoute = route,
+            selectedFareType = uiState.fareTypes.firstOrNull { it.routeId == null || it.routeId == route.id },
+            selectedDestinationStop = route.stops.maxByOrNull(Stop::order),
+            lastClosedSummary = null
+        )
     }
 
     fun selectFareType(fareType: FareType) {
-        if (!uiState.isShiftActive || fareType !in uiState.fareTypes) return
+        if (!uiState.isShiftActive || fareType !in uiState.applicableFareTypes) return
         uiState = uiState.copy(selectedFareType = fareType)
+    }
+
+    fun selectDestinationStop(stop: Stop) {
+        if (!uiState.isShiftActive || stop !in uiState.availableDestinationStops) return
+        uiState = uiState.copy(selectedDestinationStop = stop)
     }
 
     fun refreshPrinters() {
@@ -264,6 +305,7 @@ class DriverShiftViewModel(application: Application) : AndroidViewModel(applicat
         uiState = uiState.copy(
             activeShift = shift,
             routeProgress = initialProgress,
+            selectedDestinationStop = route.stops.maxByOrNull(Stop::order),
             isGpsTracking = false,
             gpsMessage = text(R.string.vm_allow_location),
             activeStopRequest = null,
@@ -503,13 +545,36 @@ class DriverShiftViewModel(application: Application) : AndroidViewModel(applicat
             uiState = uiState.copy(printerMessage = text(R.string.vm_select_printer_selling))
             return
         }
+        val now = System.currentTimeMillis()
+        val calendar = Calendar.getInstance().apply { timeInMillis = now }
+        val orderedStops = uiState.selectedRoute?.stops?.sortedBy(Stop::order).orEmpty()
+        val origin = orderedStops.getOrNull(uiState.routeProgress?.currentStopIndex ?: 0)
+        val destination = uiState.selectedDestinationStop
+        val quote = if (origin != null && destination != null && uiState.selectedRoute != null) {
+            calculateFareQuote(
+                fareType = fareType,
+                route = uiState.selectedRoute!!,
+                originStop = origin,
+                destinationStop = destination,
+                soldAtMillis = now,
+                minuteOfDay = calendar.get(Calendar.HOUR_OF_DAY) * 60 + calendar.get(Calendar.MINUTE)
+            )
+        } else {
+            null
+        }
         val ticket = Ticket(
             id = "ticket-${UUID.randomUUID()}",
             shiftId = shift.id,
             fareTypeId = fareType.id,
-            priceCents = fareType.priceCents,
-            soldAtMillis = System.currentTimeMillis(),
-            synced = false
+            priceCents = quote?.priceCents ?: fareType.priceCents,
+            soldAtMillis = now,
+            synced = false,
+            farePolicyRevision = uiState.catalogRevision,
+            originStopId = origin?.id,
+            destinationStopId = destination?.id,
+            zoneCount = quote?.zoneCount,
+            offPeakApplied = quote?.offPeakApplied,
+            transferValidUntilMillis = quote?.transferValidUntilMillis
         )
 
         repository.saveTicket(ticket)
@@ -609,6 +674,10 @@ class DriverShiftViewModel(application: Application) : AndroidViewModel(applicat
             duties.firstOrNull { it.assignment.id == assignmentId }
         }
 
+        val selectedRoute = restoredShift?.let { shift ->
+            availableRoutes.firstOrNull { it.id == shift.routeId }
+        } ?: availableRoutes.first()
+
         return DriverShiftUiState(
             availableDrivers = availableDrivers,
             selectedDriver = restoredDriver ?: availableDrivers.first(),
@@ -620,9 +689,7 @@ class DriverShiftViewModel(application: Application) : AndroidViewModel(applicat
             selectedBus = restoredShift?.let { shift ->
                 availableBuses.firstOrNull { it.id == shift.busId }
             } ?: availableBuses.first(),
-            selectedRoute = restoredShift?.let { shift ->
-                availableRoutes.firstOrNull { it.id == shift.routeId }
-            } ?: availableRoutes.first(),
+            selectedRoute = selectedRoute,
             activeShift = restoredShift,
             routeProgress = restoredProgress ?: restoredShift?.let { shift ->
                 RouteProgress(
@@ -638,7 +705,8 @@ class DriverShiftViewModel(application: Application) : AndroidViewModel(applicat
                 text(R.string.vm_stop_request_restored)
             },
             fareTypes = availableFares,
-            selectedFareType = availableFares.first(),
+            selectedFareType = availableFares.firstOrNull { it.routeId == null || it.routeId == selectedRoute.id },
+            selectedDestinationStop = selectedRoute.stops.maxByOrNull(Stop::order),
             pairedPrinters = pdfTicketPrinter.pairedPrinters(),
             selectedPrinter = repository.loadPrinter() ?: pdfTicketPrinter.pairedPrinters().first(),
             tickets = restoredTickets,
@@ -679,6 +747,8 @@ class DriverShiftViewModel(application: Application) : AndroidViewModel(applicat
         } else if (signedInDriver != null) {
             repository.saveSignedInDriver(signedInDriver)
         }
+        val selectedRoute = catalog.routes.firstOrNull { it.id == uiState.selectedRoute?.id }
+            ?: catalog.routes.first()
         uiState = uiState.copy(
             availableDrivers = catalog.drivers,
             selectedDriver = catalog.drivers.firstOrNull { it.id == uiState.selectedDriver?.id }
@@ -690,11 +760,12 @@ class DriverShiftViewModel(application: Application) : AndroidViewModel(applicat
             selectedBus = catalog.buses.firstOrNull { it.id == uiState.selectedBus?.id }
                 ?: catalog.buses.first(),
             routes = catalog.routes,
-            selectedRoute = catalog.routes.firstOrNull { it.id == uiState.selectedRoute?.id }
-                ?: catalog.routes.first(),
+            selectedRoute = selectedRoute,
+            selectedDestinationStop = selectedRoute.stops.maxByOrNull(Stop::order),
             fareTypes = catalog.fareTypes,
-            selectedFareType = catalog.fareTypes.firstOrNull { it.id == uiState.selectedFareType?.id }
-                ?: catalog.fareTypes.first(),
+            selectedFareType = catalog.fareTypes.firstOrNull {
+                it.id == uiState.selectedFareType?.id && (it.routeId == null || it.routeId == selectedRoute.id)
+            } ?: catalog.fareTypes.firstOrNull { it.routeId == null || it.routeId == selectedRoute.id },
             isCatalogRefreshing = false,
             catalogRevision = catalog.revision,
             catalogUpdatedAtMillis = catalog.updatedAtMillis,
@@ -771,8 +842,17 @@ class DriverShiftViewModel(application: Application) : AndroidViewModel(applicat
         }
         if (requestReached) repository.clearStopRequest()
 
+        val orderedStops = uiState.selectedRoute?.stops?.sortedBy(Stop::order).orEmpty()
+        val destinationStillAhead = uiState.selectedDestinationStop?.let { selected ->
+            orderedStops.indexOfFirst { it.id == selected.id } > progress.currentStopIndex
+        } == true
         uiState = uiState.copy(
             routeProgress = progress,
+            selectedDestinationStop = if (destinationStillAhead) {
+                uiState.selectedDestinationStop
+            } else {
+                orderedStops.lastOrNull()
+            },
             gpsMessage = message,
             activeStopRequest = if (requestReached) null else activeRequest,
             stopRequestMessage = if (requestReached) {

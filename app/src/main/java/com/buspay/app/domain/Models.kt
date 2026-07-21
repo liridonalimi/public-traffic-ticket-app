@@ -21,7 +21,8 @@ data class Stop(
     val name: String,
     val latitude: Double,
     val longitude: Double,
-    val order: Int
+    val order: Int,
+    val zoneId: String = "1"
 )
 
 enum class TripDirection { OUTBOUND, INBOUND }
@@ -131,8 +132,52 @@ data class FareType(
     val id: String,
     val name: String,
     val priceCents: Int,
-    val eligibility: String? = null
+    val eligibility: String? = null,
+    val additionalZoneCents: Int = 0,
+    val offPeakDiscountCents: Int = 0,
+    val offPeakStartMinutes: Int? = null,
+    val offPeakEndMinutes: Int? = null,
+    val transferWindowMinutes: Int = 0,
+    val routeId: String? = null
 )
+
+data class FareQuote(
+    val priceCents: Int,
+    val zoneCount: Int,
+    val offPeakApplied: Boolean,
+    val transferValidUntilMillis: Long?
+)
+
+fun calculateFareQuote(
+    fareType: FareType,
+    route: Route,
+    originStop: Stop,
+    destinationStop: Stop,
+    soldAtMillis: Long,
+    minuteOfDay: Int
+): FareQuote {
+    val orderedStops = route.stops.sortedBy(Stop::order)
+    val originIndex = orderedStops.indexOfFirst { it.id == originStop.id }.coerceAtLeast(0)
+    val destinationIndex = orderedStops.indexOfFirst { it.id == destinationStop.id }
+        .coerceAtLeast(originIndex)
+    val zoneCount = orderedStops.subList(originIndex, destinationIndex + 1)
+        .map(Stop::zoneId).distinct().size.coerceAtLeast(1)
+    val offPeakApplied = fareType.offPeakStartMinutes?.let { start ->
+        fareType.offPeakEndMinutes?.let { end ->
+            if (start <= end) minuteOfDay in start until end
+            else minuteOfDay >= start || minuteOfDay < end
+        }
+    } ?: false
+    val price = fareType.priceCents + ((zoneCount - 1) * fareType.additionalZoneCents) -
+        if (offPeakApplied) fareType.offPeakDiscountCents else 0
+    return FareQuote(
+        priceCents = price.coerceAtLeast(0),
+        zoneCount = zoneCount,
+        offPeakApplied = offPeakApplied,
+        transferValidUntilMillis = fareType.transferWindowMinutes.takeIf { it > 0 }
+            ?.let { soldAtMillis + (it * 60_000L) }
+    )
+}
 
 data class ManagedCatalog(
     val revision: Int,
@@ -162,12 +207,22 @@ fun ManagedCatalog.isOperationallyValid(): Boolean {
     }
     val stops = routes.flatMap(Route::stops)
     return stops.map(Stop::id).let { it.size == it.toSet().size } &&
+        stops.all { it.zoneId.isNotBlank() } &&
         routes.all { route ->
             route.stops.map(Stop::order).let { orders ->
                 orders.all { it >= 1 } && orders.size == orders.toSet().size
             }
         } &&
-        fareTypes.all { it.priceCents >= 0 } && isScheduleValid()
+        fareTypes.all {
+            it.priceCents >= 0 && it.additionalZoneCents >= 0 &&
+                it.offPeakDiscountCents >= 0 && it.transferWindowMinutes >= 0 &&
+                (it.routeId == null || routes.any { route -> route.id == it.routeId }) &&
+                ((it.offPeakStartMinutes == null && it.offPeakEndMinutes == null) ||
+                    (it.offPeakStartMinutes in 0..1439 && it.offPeakEndMinutes in 0..1439 &&
+                        it.offPeakStartMinutes != it.offPeakEndMinutes))
+        } && routes.all { route ->
+            fareTypes.any { fare -> fare.routeId == null || fare.routeId == route.id }
+        } && isScheduleValid()
 }
 
 private fun ManagedCatalog.isScheduleValid(): Boolean {
@@ -242,7 +297,13 @@ data class Ticket(
     val synced: Boolean,
     val printStatus: TicketPrintStatus = TicketPrintStatus.PENDING,
     val printAttempts: Int = 0,
-    val lastPrintError: String? = null
+    val lastPrintError: String? = null,
+    val farePolicyRevision: Int? = null,
+    val originStopId: String? = null,
+    val destinationStopId: String? = null,
+    val zoneCount: Int? = null,
+    val offPeakApplied: Boolean? = null,
+    val transferValidUntilMillis: Long? = null
 ) {
     companion object {
         const val STANDARD_FARE_TYPE_ID = "standard"

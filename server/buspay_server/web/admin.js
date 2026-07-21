@@ -163,6 +163,14 @@ function ticketItem(ticket) {
   const metadata = document.createElement("span");
   metadata.textContent = `${ticket.ticketId} · ${formatTime(ticket.soldAtMillis)}`;
   item.append(heading, metadata);
+  if (ticket.farePolicyRevision) {
+    const policy = document.createElement("span");
+    const transfer = ticket.transferValidUntilMillis
+      ? ` · transfer until ${formatTime(ticket.transferValidUntilMillis)}`
+      : "";
+    policy.textContent = `Policy revision ${ticket.farePolicyRevision} · ${ticket.originStopId} → ${ticket.destinationStopId} · ${ticket.zoneCount} zone${ticket.zoneCount === 1 ? "" : "s"}${ticket.offPeakApplied ? " · off-peak" : ""}${transfer}`;
+    item.append(policy);
+  }
   return item;
 }
 
@@ -350,14 +358,19 @@ function renderCatalog() {
       "stops",
       record,
       `${record.order}. ${record.name}`,
-      `${record.routeId} · ${record.latitude}, ${record.longitude}`
+      `${record.routeId} · zone ${record.zoneId || "1"} · ${record.latitude}, ${record.longitude}`
     )));
   elements.catalogFares.replaceChildren(...currentCatalog.fares.map((record) =>
     catalogRow(
       "fares",
       record,
       `${record.name} · ${formatMoney(record.priceCents)}`,
-      `${record.id}${record.eligibility ? ` · ${record.eligibility}` : ""}`
+      [record.id, record.eligibility,
+        record.routeId ? routeName(record.routeId) : "all routes",
+        record.additionalZoneCents ? `${formatMoney(record.additionalZoneCents)} / extra zone` : null,
+        record.offPeakDiscountCents ? `${formatMoney(record.offPeakDiscountCents)} off-peak (${minutesLabel(record.offPeakStartMinutes)}–${minutesLabel(record.offPeakEndMinutes)})` : null,
+        record.transferWindowMinutes ? `${record.transferWindowMinutes} min transfer` : null,
+      ].filter(Boolean).join(" · ")
     )
   ));
   elements.catalogServiceCalendars.replaceChildren(...currentCatalog.serviceCalendars.map((record) =>
@@ -386,6 +399,7 @@ function renderCatalog() {
     currentCatalog.routes.forEach((route) => select.append(option(route.id, route.name)));
     if (currentCatalog.routes.some((route) => route.id === selected)) select.value = selected;
   });
+  replaceCatalogSelect('form[data-entity="fares"] select[name="routeId"]', currentCatalog.routes, "All routes", (record) => record.name);
   replaceCatalogSelect('form[data-entity="scheduledTrips"] select[name="routeId"]', currentCatalog.routes, "Select route", (record) => record.name);
   replaceCatalogSelect('form[data-entity="scheduledTrips"] select[name="serviceCalendarId"]', currentCatalog.serviceCalendars, "Select calendar", (record) => record.name);
   replaceCatalogSelect('form[data-entity="tripAssignments"] select[name="tripId"]', currentCatalog.scheduledTrips, "Select trip", (record) => scheduledTripLabel(record, true));
@@ -556,10 +570,21 @@ function catalogRecordFromForm(entity, form) {
     };
   }
   if (entity === "fares") {
+    const startTime = trimmed.offPeakStartTime;
+    const endTime = trimmed.offPeakEndTime;
+    if (Boolean(startTime) !== Boolean(endTime)) throw new Error("Choose both off-peak start and end times, or leave both empty.");
+    if (startTime && startTime === endTime) throw new Error("Off-peak start and end times must be different.");
     return {
-      ...trimmed,
+      id: trimmed.id,
+      name: trimmed.name,
       priceCents: Number(trimmed.priceCents),
       eligibility: trimmed.eligibility || null,
+      routeId: trimmed.routeId || null,
+      additionalZoneCents: Number(trimmed.additionalZoneCents) || 0,
+      offPeakDiscountCents: Number(trimmed.offPeakDiscountCents) || 0,
+      offPeakStartMinutes: startTime ? timeValueToMinutes(startTime) : null,
+      offPeakEndMinutes: endTime ? timeValueToMinutes(endTime) : null,
+      transferWindowMinutes: Number(trimmed.transferWindowMinutes) || 0,
     };
   }
   if (entity === "serviceCalendars") {

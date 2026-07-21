@@ -95,7 +95,8 @@ internal fun parseManagedCatalog(raw: String): ManagedCatalog {
                         name = value.getString("name"),
                         latitude = value.getDouble("latitude"),
                         longitude = value.getDouble("longitude"),
-                        order = value.getInt("order")
+                        order = value.getInt("order"),
+                        zoneId = value.optString("zoneId", "1")
                     )
                 )
             }
@@ -122,7 +123,13 @@ internal fun parseManagedCatalog(raw: String): ManagedCatalog {
                 id = value.getString("id"),
                 name = value.getString("name"),
                 priceCents = value.getInt("priceCents"),
-                eligibility = if (value.isNull("eligibility")) null else value.getString("eligibility")
+                eligibility = if (value.isNull("eligibility")) null else value.getString("eligibility"),
+                additionalZoneCents = value.optInt("additionalZoneCents", 0),
+                offPeakDiscountCents = value.optInt("offPeakDiscountCents", 0),
+                offPeakStartMinutes = value.optNullableInt("offPeakStartMinutes"),
+                offPeakEndMinutes = value.optNullableInt("offPeakEndMinutes"),
+                transferWindowMinutes = value.optInt("transferWindowMinutes", 0),
+                routeId = if (value.isNull("routeId")) null else value.optString("routeId").takeIf(String::isNotBlank)
             )
         },
         serviceCalendars = root.optJSONArray("serviceCalendars")?.mapObjects { value ->
@@ -155,6 +162,9 @@ private inline fun <T> org.json.JSONArray.mapObjects(transform: (JSONObject) -> 
     buildList {
         for (index in 0 until length()) add(transform(getJSONObject(index)))
     }
+
+private fun JSONObject.optNullableInt(name: String): Int? =
+    if (has(name) && !isNull(name)) getInt(name) else null
 
 private fun org.json.JSONArray.mapInts(): List<Int> = buildList {
     for (index in 0 until length()) add(getInt(index))

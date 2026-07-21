@@ -53,6 +53,8 @@ It currently includes:
 - persistent authorization audit events and an isolated security-auditor web workspace
 - required counted-cash handover before shift closure with immediate variance feedback
 - offline and synchronized expected/declared cash reconciliation in Android and web reports
+- route- and zone-aware fare policies with off-peak discounts and transfer windows
+- immutable applied-fare snapshots for auditable historical ticket prices
 - cash ticket count and cash total during an active shift
 - persistent local active shift storage
 - persistent local ticket storage for future sync
@@ -87,7 +89,7 @@ It currently includes:
 22. Credential rotation and authorization auditability - complete
 23. Shift cash reconciliation and handover - complete
 24. Scheduled trips and driver/vehicle assignments - complete
-25. Fare policy engine for zones, time rules, and transfers - planned
+25. Fare policy engine for zones, time rules, and transfers - complete
 26. Controlled ticket voids, corrections, and reprints - planned
 27. Verifiable QR tickets and inspector validation - planned
 28. Operational analytics and accountable exports - planned
@@ -127,6 +129,7 @@ Presentation documentation:
 - English: `docs/EN/22-credential-rotation-and-authorization-audit.md`
 - English: `docs/EN/23-shift-cash-reconciliation-and-handover.md`
 - English: `docs/EN/24-scheduled-trips-and-assignments.md`
+- English: `docs/EN/25-fare-policy-engine.md`
 - English product roadmap: `docs/EN/PRODUCT_ROADMAP.md`
 - Albanian: `docs/SQ/01-themeli-i-projektit-dhe-skeleti-android.md`
 - Albanian: `docs/SQ/02-rrjedha-e-turnit-te-shoferit.md`
@@ -152,6 +155,7 @@ Presentation documentation:
 - Albanian: `docs/SQ/22-rotacioni-i-kredencialeve-dhe-auditimi-i-qasjes.md`
 - Albanian: `docs/SQ/23-rakordimi-dhe-dorezimi-i-arkes-se-turnit.md`
 - Albanian: `docs/SQ/24-udhetimet-e-planifikuara-dhe-caktimet.md`
+- Albanian: `docs/SQ/25-motori-i-politikave-te-tarifave.md`
 - Albanian product roadmap: `docs/SQ/UDHERREFYESI_I_PRODUKTIT.md`
 
 Technical documentation:
@@ -180,6 +184,7 @@ Technical documentation:
 - `docs/TECHNICAL/22-credential-rotation-and-authorization-audit.md`
 - `docs/TECHNICAL/23-shift-cash-reconciliation-and-handover.md`
 - `docs/TECHNICAL/24-scheduled-trips-and-assignments.md`
+- `docs/TECHNICAL/25-fare-policy-engine.md`
 - Product roadmap: `docs/TECHNICAL/PRODUCT_ROADMAP.md`
 
 ## Product roadmap
@@ -277,7 +282,7 @@ Aktualisht përfshin:
 22. Rotacioni i kredencialeve dhe auditimi i autorizimit - përfunduar
 23. Rakordimi dhe dorëzimi i arkës së turnit - përfunduar
 24. Udhëtimet e planifikuara dhe caktimi i shoferit/mjetit - gati për validim të pavarur
-25. Motori i politikave të tarifave për zona, kohë dhe transferta - planifikuar
+25. Motori i politikave të tarifave për zona, kohë dhe transferta - përfunduar
 26. Anulimi, korrigjimi dhe riprintimi i kontrolluar i biletave - planifikuar
 27. Biletat QR të verifikueshme dhe validimi nga kontrollori - planifikuar
 28. Analitika operative dhe eksportet e gjurmueshme - planifikuar

@@ -190,6 +190,7 @@
               <input name="latitude" type="number" step="any" min="-90" max="90" placeholder="42.6600" aria-label="Latitude" required>
               <input name="longitude" type="number" step="any" min="-180" max="180" placeholder="21.1600" aria-label="Longitude" required>
               <input name="order" type="number" min="1" max="10000" placeholder="1" aria-label="Stop order" required>
+              <input name="zoneId" placeholder="Zone A" value="1" aria-label="Fare zone" required>
               <button class="primary-button" type="submit">Add / update</button>
             </form>
             <div class="catalog-list" id="catalog-stops"></div>
@@ -202,6 +203,12 @@
               <input name="name" placeholder="Fare name" aria-label="Fare name" required>
               <input name="priceCents" type="number" min="0" max="100000" placeholder="50" aria-label="Price in cents" required>
               <input name="eligibility" placeholder="Eligibility (optional)" aria-label="Fare eligibility">
+              <label class="catalog-field"><span>Applies to route</span><select name="routeId" aria-label="Fare route"><option value="">All routes</option></select></label>
+              <label class="catalog-field"><span>Each extra zone (cents)</span><input name="additionalZoneCents" type="number" min="0" max="100000" value="0" required></label>
+              <label class="catalog-field"><span>Off-peak discount (cents)</span><input name="offPeakDiscountCents" type="number" min="0" max="100000" value="0" required></label>
+              <label class="catalog-field"><span>Off-peak starts</span><input name="offPeakStartTime" type="time"></label>
+              <label class="catalog-field"><span>Off-peak ends</span><input name="offPeakEndTime" type="time"></label>
+              <label class="catalog-field"><span>Transfer valid (minutes)</span><input name="transferWindowMinutes" type="number" min="0" max="1440" value="0" required></label>
               <button class="primary-button" type="submit">Add / update</button>
             </form>
             <div class="catalog-list" id="catalog-fares"></div>

@@ -50,6 +50,12 @@ def batch_payload(request_id="sync-0123456789abcdef", price_cents=30):
                 "fareTypeId": "student",
                 "priceCents": price_cents,
                 "soldAtMillis": 200,
+                "farePolicyRevision": 2,
+                "originStopId": "stop-origin",
+                "destinationStopId": "stop-destination",
+                "zoneCount": 2,
+                "offPeakApplied": True,
+                "transferValidUntilMillis": 1_800_200,
             }
         ],
     }
@@ -70,6 +76,7 @@ def catalog_payload(expected_revision=1):
                 "latitude": 42.66,
                 "longitude": 21.16,
                 "order": 1,
+                "zoneId": "A",
             }
         ],
         "fares": [
@@ -78,6 +85,12 @@ def catalog_payload(expected_revision=1):
                 "name": "E rregullt",
                 "priceCents": 60,
                 "eligibility": None,
+                "additionalZoneCents": 20,
+                "offPeakDiscountCents": 10,
+                "offPeakStartMinutes": 540,
+                "offPeakEndMinutes": 960,
+                "transferWindowMinutes": 30,
+                "routeId": "route-managed",
             }
         ],
         "serviceCalendars": [
@@ -136,6 +149,9 @@ class ContractTest(unittest.TestCase):
         )
 
         self.assertEqual("Besa Gashi", parsed.drivers[0].name)
+        self.assertEqual("A", parsed.stops[0].zone_id)
+        self.assertEqual(20, parsed.fares[0].additional_zone_cents)
+        self.assertEqual(540, parsed.fares[0].off_peak_start_minutes)
         for invalid in (missing_route, duplicate_order):
             with self.assertRaises(ContractError):
                 parse_catalog(invalid)
@@ -153,6 +169,35 @@ class ContractTest(unittest.TestCase):
         self.assertIsNone(parse_sync_batch(legacy).shifts[0].expected_cash_cents)
         with self.assertRaises(ContractError):
             parse_sync_batch(partial)
+
+    def test_fare_policy_snapshot_is_all_or_none_and_legacy_tickets_remain_valid(self):
+        complete = parse_sync_batch(batch_payload()).tickets[0]
+        legacy = batch_payload()
+        snapshot_fields = (
+            "farePolicyRevision", "originStopId", "destinationStopId", "zoneCount",
+            "offPeakApplied", "transferValidUntilMillis",
+        )
+        for field in snapshot_fields:
+            legacy["tickets"][0].pop(field)
+        partial = batch_payload()
+        partial["tickets"][0].pop("destinationStopId")
+
+        self.assertEqual(2, complete.fare_policy_revision)
+        self.assertIsNone(parse_sync_batch(legacy).tickets[0].fare_policy_revision)
+        with self.assertRaises(ContractError):
+            parse_sync_batch(partial)
+
+    def test_every_route_requires_an_applicable_fare(self):
+        incomplete = catalog_payload()
+        incomplete["routes"].append({"id": "route-without-fare", "name": "Unpriced route"})
+        incomplete["stops"].append({
+            **incomplete["stops"][0],
+            "id": "stop-without-fare",
+            "routeId": "route-without-fare",
+        })
+
+        with self.assertRaises(ContractError):
+            parse_catalog(incomplete)
 
     def test_schedule_references_and_overlapping_assignments_are_rejected(self):
         valid = parse_catalog(catalog_payload())
@@ -204,6 +249,12 @@ class DatabaseTest(unittest.TestCase):
         self.assertEqual("SHORTAGE", restarted_report["shifts"][0]["cashReconciliationStatus"])
         self.assertEqual("trip-route-1-0800", restarted_report["shifts"][0]["scheduledTripId"])
         self.assertEqual("assignment-test-001", restarted_report["shifts"][0]["assignmentId"])
+        ticket = restarted_report["shifts"][0]["tickets"][0]
+        self.assertEqual(2, ticket["farePolicyRevision"])
+        self.assertEqual("stop-origin", ticket["originStopId"])
+        self.assertEqual("stop-destination", ticket["destinationStopId"])
+        self.assertEqual(2, ticket["zoneCount"])
+        self.assertTrue(ticket["offPeakApplied"])
 
     def test_existing_shift_table_is_migrated_for_reconciliation(self):
         legacy_path = str(Path(self.temp_directory.name) / "legacy.db")
@@ -282,6 +333,9 @@ class DatabaseTest(unittest.TestCase):
         self.assertEqual(initial["revision"] + 1, replaced["revision"])
         self.assertEqual("driver-managed", restarted["drivers"][0]["id"])
         self.assertEqual(60, restarted["fares"][0]["priceCents"])
+        self.assertEqual("A", restarted["stops"][0]["zoneId"])
+        self.assertEqual(20, restarted["fares"][0]["additionalZoneCents"])
+        self.assertEqual(30, restarted["fares"][0]["transferWindowMinutes"])
 
         with self.assertRaises(ContractError) as conflict:
             self.database.replace_catalog(parse_catalog(catalog_payload(initial["revision"])))
