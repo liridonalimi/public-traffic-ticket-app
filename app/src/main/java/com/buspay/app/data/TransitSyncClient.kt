@@ -19,7 +19,8 @@ class DemoTransitSyncClient : TransitSyncClient {
         return SyncResult.Success(
             SyncAcknowledgement(
                 acknowledgedShiftIds = batch.shifts.mapTo(mutableSetOf()) { it.id },
-                acknowledgedTicketIds = batch.tickets.mapTo(mutableSetOf()) { it.id }
+                acknowledgedTicketIds = batch.tickets.mapTo(mutableSetOf()) { it.id },
+                acknowledgedTicketActionIds = batch.ticketActions.mapTo(mutableSetOf()) { it.id }
             )
         )
     }

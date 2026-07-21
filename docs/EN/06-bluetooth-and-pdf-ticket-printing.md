@@ -49,6 +49,17 @@ Physical acceptance testing is still required for every target printer model bec
 
 Android 12 and newer require nearby-device/Bluetooth permission before the app can inspect paired devices or connect to a printer. Earlier Android versions use legacy Bluetooth permissions. PDF testing remains available when Bluetooth access is denied.
 
+## Testing and validation
+
+1. Deny Bluetooth permission, select the PDF test printer, and sell a ticket. Expected: the sale succeeds and a readable PDF is created.
+2. Open the PDF and verify ticket code, bus, route, driver, fare, amount, sale time, QR, and the prominent `JO FISKAL` marking.
+3. Simulate or cause a print failure. Expected: the ticket remains stored with failed/pending status and shift closure is blocked.
+4. Retry printing. Expected: the same ticket ID is printed, the attempt count increases, and ticket/cash totals do not increase.
+5. After successful output, close the shift and confirm its ticket count and cash match the single stored sale.
+6. If physical hardware is available, repeat through Bluetooth Classic ESC/POS and verify pairing, reconnect, Albanian characters, paper feed, and failure recovery. PDF success alone does not certify the hardware.
+
+The acceptance result is durable sale-before-print behavior, duplicate-safe retry, and clear separation from fiscal certification.
+
 ## Current limitations
 
 - The PDF test output cannot validate Bluetooth transport or physical paper handling.

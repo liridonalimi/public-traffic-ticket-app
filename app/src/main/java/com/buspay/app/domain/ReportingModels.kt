@@ -23,7 +23,22 @@ data class TicketReport(
     val priceCents: Int,
     val soldAtMillis: Long,
     val synced: Boolean,
-    val printStatus: TicketPrintStatus
+    val printStatus: TicketPrintStatus,
+    val effectiveFareTypeId: String,
+    val effectivePriceCents: Int,
+    val revenueStatus: String
+)
+
+data class TicketActionReport(
+    val actionId: String,
+    val originalTicketId: String,
+    val actionType: TicketActionType,
+    val reason: TicketActionReason,
+    val supervisorId: String,
+    val authorizedAtMillis: Long,
+    val correctedFareTypeId: String?,
+    val correctedPriceCents: Int?,
+    val synced: Boolean
 )
 
 data class ShiftReport(
@@ -40,12 +55,14 @@ data class ShiftReport(
     val tickets: List<TicketReport>,
     val ticketCount: Int,
     val cashTotalCents: Int,
+    val grossCashTotalCents: Int,
     val expectedCashCents: Int?,
     val declaredCashCents: Int?,
     val cashVarianceCents: Int?,
     val cashReconciliationStatus: CashReconciliationStatus,
     val fareTypeSummaries: List<FareTypeSummary>,
-    val syncStatus: ReportingSyncStatus
+    val syncStatus: ReportingSyncStatus,
+    val ticketActions: List<TicketActionReport>
 )
 
 data class DriverReport(
@@ -67,6 +84,9 @@ data class AdminReportTotals(
     val cashVarianceTotalCents: Int,
     val reconciledShiftCount: Int,
     val unreconciledShiftCount: Int,
+    val voidCount: Int,
+    val correctionCount: Int,
+    val reprintCount: Int,
     val syncedShiftCount: Int,
     val partiallySyncedShiftCount: Int,
     val pendingShiftCount: Int,
@@ -103,7 +123,8 @@ fun buildAdminReport(
     routes: List<Route>,
     fareTypes: List<FareType>,
     filter: AdminReportFilter = AdminReportFilter(),
-    generatedAtMillis: Long = System.currentTimeMillis()
+    generatedAtMillis: Long = System.currentTimeMillis(),
+    ticketActions: List<TicketAction> = emptyList()
 ): AdminReport {
     val driversById = drivers.associateBy(Driver::id)
     val busesById = buses.associateBy(Bus::id)
@@ -112,6 +133,7 @@ fun buildAdminReport(
     val allClosedShiftIds = closedShifts.mapTo(mutableSetOf(), Shift::id)
     val unmatchedTickets = tickets.filter { it.shiftId !in allClosedShiftIds }
     val ticketsByShiftId = tickets.groupBy(Ticket::shiftId)
+    val actionsByShiftId = ticketActions.groupBy(TicketAction::shiftId)
 
     val shiftReports = closedShifts
         .asSequence()
@@ -127,9 +149,14 @@ fun buildAdminReport(
                     filter.fareTypeId?.let { ticket.fareTypeId == it } ?: true
                 }
                 .sortedBy(Ticket::soldAtMillis)
+            val shiftActions = actionsByShiftId[shift.id].orEmpty().sortedBy(TicketAction::createdAtMillis)
             if (filter.fareTypeId != null && shiftTickets.isEmpty()) return@mapNotNull null
 
             val ticketReports = shiftTickets.map { ticket ->
+                val financialAction = shiftActions.firstOrNull {
+                    it.originalTicketId == ticket.id &&
+                        it.actionType in setOf(TicketActionType.VOID, TicketActionType.CORRECTION)
+                }
                 TicketReport(
                     ticketId = ticket.id,
                     shiftId = ticket.shiftId,
@@ -138,12 +165,16 @@ fun buildAdminReport(
                     priceCents = ticket.priceCents,
                     soldAtMillis = ticket.soldAtMillis,
                     synced = ticket.synced,
-                    printStatus = ticket.printStatus
+                    printStatus = ticket.printStatus,
+                    effectiveFareTypeId = financialAction?.correctedFareTypeId ?: ticket.fareTypeId,
+                    effectivePriceCents = ticketRevenueCents(ticket, shiftActions),
+                    revenueStatus = financialAction?.actionType?.name ?: "SALE"
                 )
             }
             val syncStatus = when {
-                shift.synced && shiftTickets.all(Ticket::synced) -> ReportingSyncStatus.SYNCED
-                shift.synced || shiftTickets.any(Ticket::synced) ->
+                shift.synced && shiftTickets.all(Ticket::synced) && shiftActions.all(TicketAction::synced) ->
+                    ReportingSyncStatus.SYNCED
+                shift.synced || shiftTickets.any(Ticket::synced) || shiftActions.any(TicketAction::synced) ->
                     ReportingSyncStatus.PARTIALLY_SYNCED
                 else -> ReportingSyncStatus.PENDING
             }
@@ -162,13 +193,25 @@ fun buildAdminReport(
                 durationMillis = (endedAtMillis - shift.startedAtMillis).coerceAtLeast(0L),
                 tickets = ticketReports,
                 ticketCount = shiftTickets.size,
-                cashTotalCents = shiftTickets.sumOf(Ticket::priceCents),
+                cashTotalCents = ticketReports.sumOf(TicketReport::effectivePriceCents),
+                grossCashTotalCents = shiftTickets.sumOf(Ticket::priceCents),
                 expectedCashCents = shift.expectedCashCents,
                 declaredCashCents = shift.declaredCashCents,
                 cashVarianceCents = shift.cashVarianceCents,
                 cashReconciliationStatus = shift.cashReconciliationStatus,
                 fareTypeSummaries = summarizeTicketsByFare(shiftTickets, fareTypes),
-                syncStatus = syncStatus
+                syncStatus = syncStatus,
+                ticketActions = shiftActions.map { action -> TicketActionReport(
+                    actionId = action.id,
+                    originalTicketId = action.originalTicketId,
+                    actionType = action.actionType,
+                    reason = action.reason,
+                    supervisorId = action.supervisorId,
+                    authorizedAtMillis = action.authorizedAtMillis,
+                    correctedFareTypeId = action.correctedFareTypeId,
+                    correctedPriceCents = action.correctedPriceCents,
+                    synced = action.synced
+                ) }
             )
         }
         .sortedByDescending(ShiftReport::startedAtMillis)
@@ -192,8 +235,8 @@ fun buildAdminReport(
         Ticket(
             id = report.ticketId,
             shiftId = report.shiftId,
-            fareTypeId = report.fareTypeId,
-            priceCents = report.priceCents,
+            fareTypeId = report.effectiveFareTypeId,
+            priceCents = report.effectivePriceCents,
             soldAtMillis = report.soldAtMillis,
             synced = report.synced,
             printStatus = report.printStatus
@@ -220,6 +263,9 @@ fun buildAdminReport(
             unreconciledShiftCount = shiftReports.count {
                 it.cashReconciliationStatus == CashReconciliationStatus.NOT_RECORDED
             },
+            voidCount = ticketActions.count { it.actionType == TicketActionType.VOID },
+            correctionCount = ticketActions.count { it.actionType == TicketActionType.CORRECTION },
+            reprintCount = ticketActions.count { it.actionType == TicketActionType.REPRINT },
             syncedShiftCount = shiftReports.count { it.syncStatus == ReportingSyncStatus.SYNCED },
             partiallySyncedShiftCount = shiftReports.count {
                 it.syncStatus == ReportingSyncStatus.PARTIALLY_SYNCED

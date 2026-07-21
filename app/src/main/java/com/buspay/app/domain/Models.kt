@@ -310,6 +310,78 @@ data class Ticket(
     }
 }
 
+enum class TicketActionType {
+    VOID,
+    CORRECTION,
+    REPRINT
+}
+
+enum class TicketActionReason {
+    WRONG_FARE,
+    WRONG_DESTINATION,
+    DUPLICATE_SALE,
+    PASSENGER_REQUEST,
+    DAMAGED_PRINT,
+    PRINTER_FAILURE,
+    OTHER
+}
+
+/**
+ * Immutable post-sale evidence. The original ticket is never edited or deleted.
+ * CORRECTION stores the replacement financial value in this event; REPRINT has no
+ * revenue effect and remains distinguishable from a new ticket sale.
+ */
+data class TicketAction(
+    val id: String,
+    val originalTicketId: String,
+    val shiftId: String,
+    val actionType: TicketActionType,
+    val reason: TicketActionReason,
+    val supervisorId: String,
+    val authorizedAtMillis: Long,
+    val createdAtMillis: Long,
+    val correctedFareTypeId: String? = null,
+    val correctedPriceCents: Int? = null,
+    val synced: Boolean = false
+)
+
+fun validateTicketAction(
+    ticket: Ticket,
+    existingActions: List<TicketAction>,
+    action: TicketAction
+): Boolean {
+    if (action.originalTicketId != ticket.id || action.shiftId != ticket.shiftId) return false
+    if (action.supervisorId.isBlank() || action.authorizedAtMillis < ticket.soldAtMillis ||
+        action.createdAtMillis < action.authorizedAtMillis
+    ) return false
+    val hasFinancialAction = existingActions.any {
+        it.originalTicketId == ticket.id &&
+            it.actionType in setOf(TicketActionType.VOID, TicketActionType.CORRECTION)
+    }
+    if (action.actionType in setOf(TicketActionType.VOID, TicketActionType.CORRECTION) && hasFinancialAction) {
+        return false
+    }
+    return when (action.actionType) {
+        TicketActionType.CORRECTION ->
+            !action.correctedFareTypeId.isNullOrBlank() &&
+                action.correctedPriceCents != null && action.correctedPriceCents in 0..100_000
+        TicketActionType.VOID, TicketActionType.REPRINT ->
+            action.correctedFareTypeId == null && action.correctedPriceCents == null
+    }
+}
+
+fun ticketRevenueCents(ticket: Ticket, actions: List<TicketAction>): Int {
+    val financialAction = actions.firstOrNull {
+        it.originalTicketId == ticket.id &&
+            it.actionType in setOf(TicketActionType.VOID, TicketActionType.CORRECTION)
+    }
+    return when (financialAction?.actionType) {
+        TicketActionType.VOID -> 0
+        TicketActionType.CORRECTION -> financialAction.correctedPriceCents ?: ticket.priceCents
+        else -> ticket.priceCents
+    }
+}
+
 data class FareTypeSummary(
     val fareTypeId: String,
     val fareName: String,

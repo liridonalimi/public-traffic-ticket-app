@@ -46,4 +46,26 @@
     <string name="vm_catalog_invalid">The catalog is incomplete and was not applied</string>
     <string name="vm_catalog_refreshed" tools:ignore="PluralsCandidate">Catalog revision %1$d was stored and is ready offline</string>
     <string name="vm_catalog_refreshed_signed_out" tools:ignore="PluralsCandidate">Catalog revision %1$d was stored. The current driver no longer exists and was signed out.</string>
+    <string name="vm_ticket_action_invalid">The action was rejected. Check authorization, reason, and ticket history.</string>
+    <string name="vm_ticket_action_recorded">%1$s action recorded and waiting for synchronization</string>
+    <string name="vm_reprinting_ticket">Reprinting the original ticket…</string>
+    <string name="ticket_actions">Voids, corrections, and reprints</string>
+    <string name="ticket_actions_note">Post-sale actions are immutable. The original ticket is never deleted or edited.</string>
+    <string name="no_closed_tickets">No closed tickets are available for action.</string>
+    <string name="original_ticket">Original ticket</string>
+    <string name="select_ticket">Select ticket</string>
+    <string name="ticket_action">Action</string>
+    <string name="action_reason">Reason</string>
+    <string name="supervisor_identifier">Supervisor identifier</string>
+    <string name="supervisor_authorization_note">Stored as authorization evidence; this does not replace production identity.</string>
+    <string name="corrected_fare">Corrected fare</string>
+    <string name="corrected_price_eur">Corrected price (EUR)</string>
+    <string name="authorize_ticket_action">Authorize and Record</string>
+    <string name="ticket_action_counts">Voids: %1$d • corrections: %2$d • reprints: %3$d • pending: %4$d</string>
+    <string name="action_void">Void</string><string name="action_correction">Correction</string><string name="action_reprint">Reprint</string>
+    <string name="reason_wrong_fare">Wrong fare</string><string name="reason_wrong_destination">Wrong destination</string><string name="reason_duplicate_sale">Duplicate sale</string><string name="reason_passenger_request">Passenger request</string><string name="reason_damaged_print">Damaged print</string><string name="reason_printer_failure">Printer failure</string><string name="reason_other">Other</string>
+    <string name="report_ticket_action_counts">Voids: %1$d • corrections: %2$d • reprints: %3$d</string>
+    <string name="gross_adjusted_cash">Gross cash: %1$s • after corrections: %2$s</string>
+    <string name="ticket_action_history">Ticket action history</string>
+    <string name="ticket_action_record">%1$s • ticket %2$s • %3$s • supervisor %4$s</string>
 </resources>

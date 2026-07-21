@@ -37,6 +37,17 @@ Ky modul i mbështet kategoritë reale të pasagjerëve, e përmirëson barazimi
 - Ende nuk ka periudhë vlefshmërie, çmime sipas zonave, transfer, abonim ose tarifa promocionale.
 - Emrat dhe udhëzimet e tarifave ende nuk janë të lokalizuara plotësisht.
 
+## Testimi dhe validimi
+
+1. Filloni një turn dhe shitni nga një biletë Standarde, Student, Të moshuar 65+ dhe Fëmijë.
+2. Para secilës shitje kontrolloni udhëzimin e përfitimit dhe çmimin e tarifës së zgjedhur.
+3. Priten katër bileta dhe EUR 1.25: EUR 0.50, EUR 0.30, EUR 0.25 dhe EUR 0.20.
+4. Përfundojeni turnin dhe konfirmoni të njëjtët numra dhe nëntotale sipas tarifës.
+5. Rindizeni aplikacionin dhe kontrolloni që secila biletë ruan ID-në e tarifës dhe çmimin e paguar.
+6. Në testin e përputhshmërisë, një biletë e vjetër pa ID tarife duhet të paraqitet si Standarde pa ndryshuar shumën e ruajtur.
+
+Pranimi kërkon që ndarja sipas tarifave të rakordohet me arkën totale dhe çmimet historike të mbeten të pandryshueshme.
+
 ## Moduli i ardhshëm
 
 Moduli 06 e lidhi secilën shitje të ruajtur me printimin Bluetooth ESC/POS dhe me rrjedhën e printerit testues PDF.

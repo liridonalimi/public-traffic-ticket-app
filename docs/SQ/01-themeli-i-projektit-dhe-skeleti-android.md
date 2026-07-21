@@ -39,6 +39,16 @@ Ky themel vazhdon të jetë baza e aplikacionit. Modulet e mëvonshme i kanë pl
 
 Moduli 01 qëllimisht nuk ofroi një rrjedhë të plotë operative. Autentikimi, menaxhimi i turnit, ruajtja e përhershme lokale, komunikimi me printer, GPS-i aktiv, sinkronizimi me server dhe raportimi u planifikuan për modulet e ardhshme.
 
+## Testimi dhe validimi
+
+1. Hapeni projektin në Android Studio dhe prisni që sinkronizimi Gradle të përfundojë pa varësi të pazgjidhura.
+2. Ndërtojeni dhe instalojeni versionin debug në emulator ose tablet fizik.
+3. Niseni BusPay dhe konfirmoni që konsola fillestare e shoferit shfaqet pa crash ose ekran bosh.
+4. Rrotullojeni ose ndryshojeni madhësinë e ekranit dhe konfirmoni që pamja Compose mbetet e përdorshme.
+5. Ekzekutoni testet unitare Android, ndërtimin debug dhe lint. Pritet që të gjitha të kalojnë dhe të krijohet APK-ja debug.
+
+Ky validim mbulon aplikacionin e instalueshëm, pikën hyrëse Compose, resurset Android dhe kufijtë arkitekturorë; nuk pretendon funksionet e moduleve të mëvonshme.
+
 ## Moduli i ardhshëm
 
 Moduli 02 shtoi rrjedhën e parë të plotë të turnit me zgjedhjen e autobusit dhe linjës, totalet e biletave dhe përfundimin e turnit.

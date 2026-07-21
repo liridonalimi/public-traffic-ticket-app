@@ -278,4 +278,26 @@
     <string name="cert_qr">Skanimi i QR-së dhe shenja JO FISKAL</string>
     <string name="cert_retry">Gabimi, riprovimi dhe mbrojtja nga bileta e dyfishtë</string>
     <string name="cert_endurance">50 bileta radhazi, bateria dhe temperatura</string>
+    <string name="vm_ticket_action_invalid">Veprimi u refuzua. Kontrolloni autorizimin, arsyen dhe historikun e biletës.</string>
+    <string name="vm_ticket_action_recorded">Veprimi %1$s u regjistrua dhe pret sinkronizimin</string>
+    <string name="vm_reprinting_ticket">Po riprintohet bileta origjinale…</string>
+    <string name="ticket_actions">Anulime, korrigjime dhe riprintime</string>
+    <string name="ticket_actions_note">Veprimet pas shitjes janë të pandryshueshme. Bileta origjinale nuk fshihet ose ndryshohet.</string>
+    <string name="no_closed_tickets">Nuk ka bileta të mbyllura për veprim.</string>
+    <string name="original_ticket">Bileta origjinale</string>
+    <string name="select_ticket">Zgjidhni biletën</string>
+    <string name="ticket_action">Veprimi</string>
+    <string name="action_reason">Arsyeja</string>
+    <string name="supervisor_identifier">Identifikuesi i mbikëqyrësit</string>
+    <string name="supervisor_authorization_note">Regjistrohet si dëshmi autorizimi; nuk është zëvendësim për identitetin e prodhimit.</string>
+    <string name="corrected_fare">Tarifa e korrigjuar</string>
+    <string name="corrected_price_eur">Çmimi i korrigjuar (EUR)</string>
+    <string name="authorize_ticket_action">Autorizo dhe regjistro</string>
+    <string name="ticket_action_counts">Anulime: %1$d • korrigjime: %2$d • riprintime: %3$d • në pritje: %4$d</string>
+    <string name="action_void">Anulim</string><string name="action_correction">Korrigjim</string><string name="action_reprint">Riprintim</string>
+    <string name="reason_wrong_fare">Tarifë e gabuar</string><string name="reason_wrong_destination">Destinacion i gabuar</string><string name="reason_duplicate_sale">Shitje e dyfishtë</string><string name="reason_passenger_request">Kërkesë e pasagjerit</string><string name="reason_damaged_print">Printim i dëmtuar</string><string name="reason_printer_failure">Dështim i printerit</string><string name="reason_other">Tjetër</string>
+    <string name="report_ticket_action_counts">Anulime: %1$d • korrigjime: %2$d • riprintime: %3$d</string>
+    <string name="gross_adjusted_cash">Arka bruto: %1$s • pas korrigjimeve: %2$s</string>
+    <string name="ticket_action_history">Historiku i veprimeve të biletës</string>
+    <string name="ticket_action_record">%1$s • bileta %2$s • %3$s • mbikëqyrësi %4$s</string>
 </resources>

@@ -11,6 +11,7 @@ from typing import Any, Dict, List
 CONTRACT_VERSION = 1
 MAX_SHIFTS_PER_BATCH = 250
 MAX_TICKETS_PER_BATCH = 5_000
+MAX_TICKET_ACTIONS_PER_BATCH = 5_000
 REQUEST_ID_PATTERN = re.compile(r"^sync-[a-f0-9]{16}$")
 
 
@@ -82,20 +83,56 @@ class TicketInput:
 
 
 @dataclass(frozen=True)
+class TicketActionInput:
+    id: str
+    original_ticket_id: str
+    shift_id: str
+    action_type: str
+    reason: str
+    supervisor_id: str
+    authorized_at_millis: int
+    created_at_millis: int
+    corrected_fare_type_id: str | None
+    corrected_price_cents: int | None
+
+    def canonical(self) -> Dict[str, Any]:
+        return {
+            "id": self.id,
+            "originalTicketId": self.original_ticket_id,
+            "shiftId": self.shift_id,
+            "actionType": self.action_type,
+            "reason": self.reason,
+            "supervisorId": self.supervisor_id,
+            "authorizedAtMillis": self.authorized_at_millis,
+            "createdAtMillis": self.created_at_millis,
+            "correctedFareTypeId": self.corrected_fare_type_id,
+            "correctedPriceCents": self.corrected_price_cents,
+        }
+
+
+@dataclass(frozen=True)
 class SyncBatchInput:
     request_id: str
     sent_at_millis: int
     shifts: List[ShiftInput]
     tickets: List[TicketInput]
+    ticket_actions: List[TicketActionInput]
 
     def canonical(self) -> Dict[str, Any]:
-        return {
+        value = {
             "contractVersion": CONTRACT_VERSION,
             "requestId": self.request_id,
             "sentAtMillis": self.sent_at_millis,
             "shifts": [shift.canonical() for shift in self.shifts],
             "tickets": [ticket.canonical() for ticket in self.tickets],
         }
+        # Preserve hashes for pre-Module-26 request replays.
+        if self.ticket_actions:
+            value["ticketActions"] = [action.canonical() for action in self.ticket_actions]
+            # Retry time is transport metadata, not financial entity identity.
+            # Excluding it makes a lost action acknowledgement safely replayable.
+            value.pop("sentAtMillis", None)
+        return value
 
 
 @dataclass(frozen=True)
@@ -205,18 +242,22 @@ def parse_sync_batch(payload: Any) -> SyncBatchInput:
     sent_at_millis = _required_integer(payload, "sentAtMillis", minimum=0)
     raw_shifts = _required_list(payload, "shifts", MAX_SHIFTS_PER_BATCH)
     raw_tickets = _required_list(payload, "tickets", MAX_TICKETS_PER_BATCH)
-    if not raw_shifts and not raw_tickets:
+    raw_actions = _optional_list(payload, "ticketActions", MAX_TICKET_ACTIONS_PER_BATCH)
+    if not raw_shifts and not raw_tickets and not raw_actions:
         raise ContractError("Sync batch must contain at least one record")
 
     shifts = [_parse_shift(value) for value in raw_shifts]
     tickets = [_parse_ticket(value) for value in raw_tickets]
+    actions = [_parse_ticket_action(value) for value in raw_actions]
     _require_unique([shift.id for shift in shifts], "shift")
     _require_unique([ticket.id for ticket in tickets], "ticket")
+    _require_unique([action.id for action in actions], "ticket action")
     return SyncBatchInput(
         request_id=request_id,
         sent_at_millis=sent_at_millis,
         shifts=shifts,
         tickets=tickets,
+        ticket_actions=actions,
     )
 
 
@@ -500,6 +541,41 @@ def _parse_ticket(value: Any) -> TicketInput:
         zone_count=zone_count,
         off_peak_applied=off_peak,
         transfer_valid_until_millis=transfer_valid_until,
+    )
+
+
+def _parse_ticket_action(value: Any) -> TicketActionInput:
+    _require_object(value, "ticket action")
+    action_type = _required_string(value, "actionType", maximum=20)
+    if action_type not in ("VOID", "CORRECTION", "REPRINT"):
+        raise ContractError("Ticket action type must be VOID, CORRECTION, or REPRINT")
+    reason = _required_string(value, "reason", maximum=40)
+    allowed_reasons = {
+        "WRONG_FARE", "WRONG_DESTINATION", "DUPLICATE_SALE", "PASSENGER_REQUEST",
+        "DAMAGED_PRINT", "PRINTER_FAILURE", "OTHER",
+    }
+    if reason not in allowed_reasons:
+        raise ContractError("Unknown ticket action reason")
+    authorized_at = _required_integer(value, "authorizedAtMillis", minimum=0)
+    created_at = _required_integer(value, "createdAtMillis", minimum=authorized_at)
+    corrected_fare = _optional_string(value, "correctedFareTypeId", maximum=80)
+    corrected_price = _optional_integer(value, "correctedPriceCents", minimum=0, maximum=100_000)
+    if action_type == "CORRECTION":
+        if corrected_fare is None or corrected_price is None:
+            raise ContractError("Corrections require corrected fare and price")
+    elif corrected_fare is not None or corrected_price is not None:
+        raise ContractError("Only corrections may contain corrected fare and price")
+    return TicketActionInput(
+        id=_required_string(value, "id"),
+        original_ticket_id=_required_string(value, "originalTicketId"),
+        shift_id=_required_string(value, "shiftId"),
+        action_type=action_type,
+        reason=reason,
+        supervisor_id=_required_string(value, "supervisorId", maximum=120),
+        authorized_at_millis=authorized_at,
+        created_at_millis=created_at,
+        corrected_fare_type_id=corrected_fare,
+        corrected_price_cents=corrected_price,
     )
 
 

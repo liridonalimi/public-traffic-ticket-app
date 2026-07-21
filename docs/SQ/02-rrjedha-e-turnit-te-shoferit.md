@@ -22,6 +22,16 @@ Ky modul eshte baza per pergjegjesine e shoferit. Cdo shitje bilete lidhet me nj
 
 Kjo eshte nje rrjedhe pilot brenda aplikacionit. Lista e autobuseve, lista e linjave, cmimi i biletes dhe shoferi jane te dhena demo brenda aplikacionit Android. Shitjet numerohen gjate sesionit te aplikacionit, por ende nuk ruhen pergjithmone pas mbylljes se aplikacionit.
 
+## Testimi dhe validimi
+
+1. Niseni aplikacionin dhe zgjidhni një autobus dhe linjë demo.
+2. Fillojeni turnin dhe konfirmoni që autobusi dhe linja nuk mund të ndryshohen gjatë turnit aktiv.
+3. Shitni tri bileta standarde. Pritet numri `3` dhe arka EUR 1.50.
+4. Përfundojeni turnin dhe kontrolloni që përmbledhja ruan autobusin, linjën, tri biletat dhe EUR 1.50.
+5. Provoni të shitni pa turn aktiv. Pritet që të mos krijohet biletë dhe arka të mos ndryshojë.
+
+Pranimi kërkon që secila shitje t'i përkasë një turni aktiv dhe totalet të dalin nga biletat e tij.
+
 ## Permiresimet e planifikuara
 
 - Ruajtja lokale e biletave ne tablet.

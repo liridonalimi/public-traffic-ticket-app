@@ -18,9 +18,13 @@ import com.buspay.app.domain.StopRequest
 import com.buspay.app.domain.RouteProgress
 import com.buspay.app.domain.RouteProgressSource
 import com.buspay.app.domain.Ticket
+import com.buspay.app.domain.TicketAction
+import com.buspay.app.domain.TicketActionReason
+import com.buspay.app.domain.TicketActionType
 import com.buspay.app.domain.TicketPrintStatus
 import com.buspay.app.domain.acknowledgeShifts
 import com.buspay.app.domain.acknowledgeTickets
+import com.buspay.app.domain.acknowledgeTicketActions
 import com.buspay.app.device.PrinterDevice
 import org.json.JSONArray
 import org.json.JSONObject
@@ -88,15 +92,29 @@ class OfflineFirstRepository(context: Context) {
 
     fun ticketsForReporting(): List<Ticket> = loadTickets()
 
+    fun saveTicketAction(action: TicketAction) {
+        require(loadTicketActions().none { it.id == action.id }) { "Ticket action IDs are immutable" }
+        saveTicketActions(loadTicketActions() + action)
+    }
+
+    fun ticketActionsForReporting(): List<TicketAction> = loadTicketActions()
+
+    fun pendingTicketActionsForSync(): List<TicketAction> = loadTicketActions().filter { !it.synced }
+
     fun pendingTicketsForSync(activeShiftId: String?): List<Ticket> {
         return loadTickets().filter { ticket ->
             !ticket.synced && ticket.shiftId != activeShiftId
         }
     }
 
-    fun markSyncAcknowledged(shiftIds: Set<String>, ticketIds: Set<String>) {
+    fun markSyncAcknowledged(
+        shiftIds: Set<String>,
+        ticketIds: Set<String>,
+        ticketActionIds: Set<String> = emptySet()
+    ) {
         saveClosedShifts(acknowledgeShifts(loadClosedShifts(), shiftIds))
         saveTickets(acknowledgeTickets(loadTickets(), ticketIds))
+        saveTicketActions(acknowledgeTicketActions(loadTicketActions(), ticketActionIds))
     }
 
     fun clearActiveShift() {
@@ -142,6 +160,8 @@ class OfflineFirstRepository(context: Context) {
     fun pendingTicketCount(): Int = loadTickets().count { !it.synced }
 
     fun pendingShiftCount(): Int = loadClosedShifts().count { !it.synced }
+
+    fun pendingTicketActionCount(): Int = loadTicketActions().count { !it.synced }
 
     fun savePrinter(printer: PrinterDevice) {
         preferences.edit()
@@ -251,6 +271,20 @@ class OfflineFirstRepository(context: Context) {
             .apply()
     }
 
+    private fun loadTicketActions(): List<TicketAction> {
+        val raw = preferences.getString(KEY_TICKET_ACTIONS, null) ?: return emptyList()
+        val values = JSONArray(raw)
+        return buildList {
+            for (index in 0 until values.length()) add(ticketActionFromJson(values.getJSONObject(index)))
+        }
+    }
+
+    private fun saveTicketActions(actions: List<TicketAction>) {
+        val values = JSONArray()
+        actions.forEach { values.put(it.toJson()) }
+        preferences.edit().putString(KEY_TICKET_ACTIONS, values.toString()).apply()
+    }
+
     private fun loadClosedShifts(): List<Shift> {
         val rawShifts = preferences.getString(KEY_CLOSED_SHIFTS, null) ?: return emptyList()
         val shiftArray = JSONArray(rawShifts)
@@ -326,11 +360,25 @@ class OfflineFirstRepository(context: Context) {
             .put("transferValidUntilMillis", transferValidUntilMillis)
     }
 
+    private fun TicketAction.toJson(): JSONObject = JSONObject()
+        .put("id", id)
+        .put("originalTicketId", originalTicketId)
+        .put("shiftId", shiftId)
+        .put("actionType", actionType.name)
+        .put("reason", reason.name)
+        .put("supervisorId", supervisorId)
+        .put("authorizedAtMillis", authorizedAtMillis)
+        .put("createdAtMillis", createdAtMillis)
+        .put("correctedFareTypeId", correctedFareTypeId)
+        .put("correctedPriceCents", correctedPriceCents)
+        .put("synced", synced)
+
     private companion object {
         const val STORAGE_NAME = "offline_first_repository"
         const val KEY_ACTIVE_SHIFT = "active_shift"
         const val KEY_SIGNED_IN_DRIVER = "signed_in_driver"
         const val KEY_TICKETS = "tickets"
+        const val KEY_TICKET_ACTIONS = "ticket_actions"
         const val KEY_CLOSED_SHIFTS = "closed_shifts"
         const val KEY_ROUTE_PROGRESS = "route_progress"
         const val KEY_STOP_REQUEST = "stop_request"
@@ -398,6 +446,20 @@ class OfflineFirstRepository(context: Context) {
                 transferValidUntilMillis = json.optionalLong("transferValidUntilMillis")
             )
         }
+
+        fun ticketActionFromJson(json: JSONObject): TicketAction = TicketAction(
+            id = json.getString("id"),
+            originalTicketId = json.getString("originalTicketId"),
+            shiftId = json.getString("shiftId"),
+            actionType = TicketActionType.valueOf(json.getString("actionType")),
+            reason = TicketActionReason.valueOf(json.getString("reason")),
+            supervisorId = json.getString("supervisorId"),
+            authorizedAtMillis = json.getLong("authorizedAtMillis"),
+            createdAtMillis = json.getLong("createdAtMillis"),
+            correctedFareTypeId = json.optString("correctedFareTypeId").takeIf { it.isNotBlank() },
+            correctedPriceCents = if (json.isNull("correctedPriceCents")) null else json.getInt("correctedPriceCents"),
+            synced = json.optBoolean("synced", false)
+        )
 
         fun routeProgressFromJson(json: JSONObject): RouteProgress {
             return RouteProgress(

@@ -21,6 +21,17 @@ Ky modul e permireson pergjegjesine e shoferit. Shitjet e biletave dhe totalet e
 
 Aplikacioni perdor nje liste lokale demo te shoferave brenda aplikacionit Android. Shoferi i kyqur ruhet lokalisht permes depozites offline-first. Fillimi i turnit bllokohet derisa nje shofer te jete i kyqur, ndersa ckycja bllokohet gjate nje turni aktiv.
 
+## Testimi dhe validimi
+
+1. Niseni aplikacionin pa u kyçur dhe provoni ta filloni turnin. Pritet që veprimi të jetë i bllokuar.
+2. Zgjidhni një shofer, kyçuni dhe kontrolloni emrin dhe ID-në në konsolë.
+3. Filloni turnin dhe konfirmoni që çkyçja dhe ndryshimi i shoferit nuk lejohen.
+4. Rindizeni plotësisht aplikacionin gjatë turnit. Pritet rikthimi me të njëjtën ID shoferi.
+5. Përfundojeni turnin, çkyçuni, zgjidhni shofer tjetër dhe krijoni një turn të ri.
+6. Kontrolloni që dy turnet e mbyllura ruajnë identitetet e tyre përkatëse.
+
+Pranimi kërkon atribuim të qëndrueshëm të shoferit dhe asnjë ndryshim identiteti gjatë shërbimit aktiv.
+
 ## Permiresimet e planifikuara
 
 - Zevendesimi i listes lokale te shoferave me autentikim nga backend.

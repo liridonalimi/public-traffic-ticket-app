@@ -71,6 +71,9 @@ import com.buspay.app.domain.FareType
 import com.buspay.app.domain.Stop
 import com.buspay.app.domain.Route
 import com.buspay.app.domain.ReportingSyncStatus
+import com.buspay.app.domain.Ticket
+import com.buspay.app.domain.TicketActionReason
+import com.buspay.app.domain.TicketActionType
 import com.buspay.app.domain.parseEuroAmountToCents
 import com.buspay.app.data.SyncRuntimeMode
 import java.io.File
@@ -810,6 +813,16 @@ private fun OperationsToolsScreen(
             label = stringResource(R.string.language_english)
         )
     )
+    var selectedCorrectionTicket by remember(state.correctionTickets) {
+        mutableStateOf(state.correctionTickets.firstOrNull())
+    }
+    var selectedTicketAction by remember { mutableStateOf(TicketActionType.VOID) }
+    var selectedTicketReason by remember { mutableStateOf(TicketActionReason.PASSENGER_REQUEST) }
+    var supervisorIdDraft by rememberSaveable { mutableStateOf("") }
+    var correctedFare by remember(state.fareTypes) { mutableStateOf(state.fareTypes.firstOrNull()) }
+    var correctedPriceDraft by rememberSaveable { mutableStateOf("") }
+    val actionLabels = TicketActionType.entries.associateWith { localizedTicketAction(it) }
+    val reasonLabels = TicketActionReason.entries.associateWith { localizedTicketActionReason(it) }
 
     Surface(modifier = Modifier.fillMaxSize()) {
         Column(
@@ -861,6 +874,113 @@ private fun OperationsToolsScreen(
                         style = MaterialTheme.typography.bodySmall
                     )
                 }
+            }
+
+            Spacer(modifier = Modifier.height(20.dp))
+            Text(
+                stringResource(R.string.ticket_actions),
+                fontSize = 22.sp,
+                fontWeight = FontWeight.Bold
+            )
+            Text(
+                stringResource(R.string.ticket_actions_note),
+                style = MaterialTheme.typography.bodySmall
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            if (state.correctionTickets.isEmpty()) {
+                Text(stringResource(R.string.no_closed_tickets))
+            } else {
+                SelectorCard(
+                    title = stringResource(R.string.original_ticket),
+                    selectedText = selectedCorrectionTicket?.let(::ticketActionDisplayName)
+                        ?: stringResource(R.string.select_ticket),
+                    enabled = !state.isPrinting,
+                    items = state.correctionTickets.take(100),
+                    itemText = ::ticketActionDisplayName,
+                    onItemSelected = { selectedCorrectionTicket = it }
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                SelectorCard(
+                    title = stringResource(R.string.ticket_action),
+                    selectedText = actionLabels.getValue(selectedTicketAction),
+                    enabled = !state.isPrinting,
+                    items = TicketActionType.entries,
+                    itemText = actionLabels::getValue,
+                    onItemSelected = { selectedTicketAction = it }
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                SelectorCard(
+                    title = stringResource(R.string.action_reason),
+                    selectedText = reasonLabels.getValue(selectedTicketReason),
+                    enabled = !state.isPrinting,
+                    items = TicketActionReason.entries,
+                    itemText = reasonLabels::getValue,
+                    onItemSelected = { selectedTicketReason = it }
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                OutlinedTextField(
+                    value = supervisorIdDraft,
+                    onValueChange = { supervisorIdDraft = it },
+                    label = { Text(stringResource(R.string.supervisor_identifier)) },
+                    supportingText = { Text(stringResource(R.string.supervisor_authorization_note)) },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                if (selectedTicketAction == TicketActionType.CORRECTION) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    correctedFare?.let { fare ->
+                        SelectorCard(
+                            title = stringResource(R.string.corrected_fare),
+                            selectedText = fare.name,
+                            enabled = !state.isPrinting,
+                            items = state.fareTypes,
+                            itemText = FareType::name,
+                            onItemSelected = { correctedFare = it }
+                        )
+                    }
+                    OutlinedTextField(
+                        value = correctedPriceDraft,
+                        onValueChange = { correctedPriceDraft = it },
+                        label = { Text(stringResource(R.string.corrected_price_eur)) },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+                Spacer(modifier = Modifier.height(8.dp))
+                Button(
+                    onClick = {
+                        selectedCorrectionTicket?.let { ticket ->
+                            viewModel.recordTicketAction(
+                                ticket = ticket,
+                                actionType = selectedTicketAction,
+                                reason = selectedTicketReason,
+                                supervisorId = supervisorIdDraft,
+                                correctedFareTypeId = correctedFare?.id
+                                    .takeIf { selectedTicketAction == TicketActionType.CORRECTION },
+                                correctedPriceCents = parseEuroAmountToCents(correctedPriceDraft)
+                                    .takeIf { selectedTicketAction == TicketActionType.CORRECTION }
+                            )
+                        }
+                    },
+                    enabled = selectedCorrectionTicket != null && supervisorIdDraft.isNotBlank() &&
+                        !state.isPrinting && (selectedTicketAction != TicketActionType.CORRECTION ||
+                        (correctedFare != null && parseEuroAmountToCents(correctedPriceDraft) != null)),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(stringResource(R.string.authorize_ticket_action))
+                }
+                state.ticketActionMessage?.let { Text(it) }
+                Text(
+                    stringResource(
+                        R.string.ticket_action_counts,
+                        state.ticketActions.count { it.actionType == TicketActionType.VOID },
+                        state.ticketActions.count { it.actionType == TicketActionType.CORRECTION },
+                        state.ticketActions.count { it.actionType == TicketActionType.REPRINT },
+                        state.pendingTicketActionCount
+                    ),
+                    style = MaterialTheme.typography.bodySmall
+                )
             }
 
             Spacer(modifier = Modifier.height(20.dp))
@@ -1098,6 +1218,31 @@ private data class AppLanguageOption(
 )
 
 @Composable
+private fun localizedTicketAction(action: TicketActionType): String = stringResource(
+    when (action) {
+        TicketActionType.VOID -> R.string.action_void
+        TicketActionType.CORRECTION -> R.string.action_correction
+        TicketActionType.REPRINT -> R.string.action_reprint
+    }
+)
+
+@Composable
+private fun localizedTicketActionReason(reason: TicketActionReason): String = stringResource(
+    when (reason) {
+        TicketActionReason.WRONG_FARE -> R.string.reason_wrong_fare
+        TicketActionReason.WRONG_DESTINATION -> R.string.reason_wrong_destination
+        TicketActionReason.DUPLICATE_SALE -> R.string.reason_duplicate_sale
+        TicketActionReason.PASSENGER_REQUEST -> R.string.reason_passenger_request
+        TicketActionReason.DAMAGED_PRINT -> R.string.reason_damaged_print
+        TicketActionReason.PRINTER_FAILURE -> R.string.reason_printer_failure
+        TicketActionReason.OTHER -> R.string.reason_other
+    }
+)
+
+private fun ticketActionDisplayName(ticket: Ticket): String =
+    "${ticket.id.takeLast(8)} • ${formatEuroCents(ticket.priceCents)}"
+
+@Composable
 private fun AdminReportScreen(
     report: AdminReport?,
     onRefresh: () -> Unit,
@@ -1154,6 +1299,14 @@ private fun AdminReportScreen(
                                 R.string.reconciliation_shift_counts,
                                 report.totals.reconciledShiftCount,
                                 report.totals.unreconciledShiftCount
+                            )
+                        )
+                        Text(
+                            stringResource(
+                                R.string.report_ticket_action_counts,
+                                report.totals.voidCount,
+                                report.totals.correctionCount,
+                                report.totals.reprintCount
                             )
                         )
                         Text(
@@ -1286,6 +1439,15 @@ private fun AdminReportScreen(
                                     formatEuroCents(shift.cashTotalCents)
                                 )
                             )
+                            if (shift.grossCashTotalCents != shift.cashTotalCents) {
+                                Text(
+                                    stringResource(
+                                        R.string.gross_adjusted_cash,
+                                        formatEuroCents(shift.grossCashTotalCents),
+                                        formatEuroCents(shift.cashTotalCents)
+                                    )
+                                )
+                            }
                             Text(
                                 stringResource(
                                     R.string.cash_reconciliation_value,
@@ -1321,6 +1483,21 @@ private fun AdminReportScreen(
                                             stringResource(
                                                 if (ticket.synced) R.string.synced else R.string.pending
                                             )
+                                        )
+                                    )
+                                }
+                            }
+                            if (shift.ticketActions.isNotEmpty()) {
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Text(stringResource(R.string.ticket_action_history), fontWeight = FontWeight.Bold)
+                                shift.ticketActions.forEach { action ->
+                                    Text(
+                                        stringResource(
+                                            R.string.ticket_action_record,
+                                            localizedTicketAction(action.actionType),
+                                            action.originalTicketId.takeLast(8),
+                                            localizedTicketActionReason(action.reason),
+                                            action.supervisorId
                                         )
                                     )
                                 }

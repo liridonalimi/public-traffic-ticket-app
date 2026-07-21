@@ -134,7 +134,7 @@ class ProductionTransitSyncClient(
     private val clockMillis: () -> Long = System::currentTimeMillis
 ) : TransitSyncClient {
     override suspend fun sync(batch: SyncBatch): SyncResult {
-        if (batch.shifts.isEmpty() && batch.tickets.isEmpty()) {
+        if (batch.shifts.isEmpty() && batch.tickets.isEmpty() && batch.ticketActions.isEmpty()) {
             return SyncResult.Failure("The sync batch is empty")
         }
         if (batch.shifts.any { it.endedAtMillis == null }) {
@@ -177,8 +177,10 @@ class ProductionTransitSyncClient(
 
         val shiftIds = batch.shifts.mapTo(mutableSetOf()) { it.id }
         val ticketIds = batch.tickets.mapTo(mutableSetOf()) { it.id }
+        val ticketActionIds = batch.ticketActions.mapTo(mutableSetOf()) { it.id }
         if (!shiftIds.containsAll(acknowledgement.acknowledgedShiftIds) ||
-            !ticketIds.containsAll(acknowledgement.acknowledgedTicketIds)
+            !ticketIds.containsAll(acknowledgement.acknowledgedTicketIds) ||
+            !ticketActionIds.containsAll(acknowledgement.acknowledgedTicketActionIds)
         ) {
             return SyncResult.Failure("The server acknowledged records outside this sync batch")
         }
@@ -262,6 +264,22 @@ private fun SyncBatch.toContractJson(sentAtMillis: Long): String = buildString {
         appendJsonNullableNumber("transferValidUntilMillis", ticket.transferValidUntilMillis)
         append('}')
     }
+    append("],\"ticketActions\":[")
+    ticketActions.forEachIndexed { index, action ->
+        if (index > 0) append(',')
+        append('{')
+        appendJsonString("id", action.id); append(',')
+        appendJsonString("originalTicketId", action.originalTicketId); append(',')
+        appendJsonString("shiftId", action.shiftId); append(',')
+        appendJsonString("actionType", action.actionType.name); append(',')
+        appendJsonString("reason", action.reason.name); append(',')
+        appendJsonString("supervisorId", action.supervisorId); append(',')
+        appendJsonNumber("authorizedAtMillis", action.authorizedAtMillis); append(',')
+        appendJsonNumber("createdAtMillis", action.createdAtMillis); append(',')
+        appendJsonNullableString("correctedFareTypeId", action.correctedFareTypeId); append(',')
+        appendJsonNullableNumber("correctedPriceCents", action.correctedPriceCents)
+        append('}')
+    }
     append("]}")
 }
 
@@ -313,7 +331,8 @@ private fun parseAcknowledgement(body: String, expectedRequestId: String): SyncA
     require(body.stringField("requestId") == expectedRequestId)
     return SyncAcknowledgement(
         acknowledgedShiftIds = body.stringArrayField("acknowledgedShiftIds").toSet(),
-        acknowledgedTicketIds = body.stringArrayField("acknowledgedTicketIds").toSet()
+        acknowledgedTicketIds = body.stringArrayField("acknowledgedTicketIds").toSet(),
+        acknowledgedTicketActionIds = body.optionalStringArrayField("acknowledgedTicketActionIds").toSet()
     )
 }
 
@@ -338,6 +357,9 @@ private fun String.stringArrayField(name: String): List<String> {
     val valuePattern = Regex("\\\"((?:\\\\.|[^\\\"\\\\])*)\\\"")
     return valuePattern.findAll(content).map { it.groupValues[1].jsonUnescaped() }.toList()
 }
+
+private fun String.optionalStringArrayField(name: String): List<String> =
+    if (contains(Regex("\\\"${Regex.escape(name)}\\\"\\s*:"))) stringArrayField(name) else emptyList()
 
 private fun String.jsonUnescaped(): String = buildString {
     var index = 0

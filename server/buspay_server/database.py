@@ -15,6 +15,7 @@ from .contract import (
     ContractError,
     ShiftInput,
     SyncBatchInput,
+    TicketActionInput,
     TicketInput,
 )
 
@@ -90,6 +91,26 @@ class SyncDatabase:
                 CREATE INDEX IF NOT EXISTS idx_shifts_driver ON shifts(driver_id);
                 CREATE INDEX IF NOT EXISTS idx_tickets_shift ON tickets(shift_id);
                 CREATE INDEX IF NOT EXISTS idx_tickets_fare ON tickets(fare_type_id);
+
+                CREATE TABLE IF NOT EXISTS ticket_actions (
+                    id TEXT PRIMARY KEY,
+                    original_ticket_id TEXT NOT NULL REFERENCES tickets(id),
+                    shift_id TEXT NOT NULL REFERENCES shifts(id),
+                    action_type TEXT NOT NULL CHECK(action_type IN ('VOID', 'CORRECTION', 'REPRINT')),
+                    reason TEXT NOT NULL,
+                    supervisor_id TEXT NOT NULL,
+                    authorized_at_millis INTEGER NOT NULL,
+                    created_at_millis INTEGER NOT NULL,
+                    corrected_fare_type_id TEXT,
+                    corrected_price_cents INTEGER CHECK(corrected_price_cents >= 0),
+                    first_request_id TEXT NOT NULL REFERENCES sync_requests(request_id),
+                    CHECK((action_type = 'CORRECTION' AND corrected_fare_type_id IS NOT NULL AND corrected_price_cents IS NOT NULL)
+                        OR (action_type != 'CORRECTION' AND corrected_fare_type_id IS NULL AND corrected_price_cents IS NULL))
+                );
+                CREATE UNIQUE INDEX IF NOT EXISTS idx_ticket_one_financial_action
+                    ON ticket_actions(original_ticket_id)
+                    WHERE action_type IN ('VOID', 'CORRECTION');
+                CREATE INDEX IF NOT EXISTS idx_ticket_actions_shift ON ticket_actions(shift_id);
 
                 CREATE TABLE IF NOT EXISTS catalog_metadata (
                     singleton INTEGER PRIMARY KEY CHECK(singleton = 1),
@@ -351,6 +372,7 @@ class SyncDatabase:
                 "requestId": batch.request_id,
                 "acknowledgedShiftIds": [shift.id for shift in batch.shifts],
                 "acknowledgedTicketIds": [ticket.id for ticket in batch.tickets],
+                "acknowledgedTicketActionIds": [action.id for action in batch.ticket_actions],
             }
             connection.execute(
                 """
@@ -370,6 +392,8 @@ class SyncDatabase:
                 self._insert_or_match_shift(connection, shift, batch.request_id)
             for ticket in batch.tickets:
                 self._insert_or_match_ticket(connection, ticket, batch.request_id)
+            for action in batch.ticket_actions:
+                self._insert_or_match_ticket_action(connection, action, batch.request_id)
             connection.commit()
             return response, False
         except Exception:
@@ -537,13 +561,22 @@ class SyncDatabase:
         try:
             overall = connection.execute(
                 """
+                WITH effective_tickets AS (
+                    SELECT t.*, COALESCE(
+                        (SELECT CASE a.action_type WHEN 'VOID' THEN 0 ELSE a.corrected_price_cents END
+                         FROM ticket_actions a WHERE a.original_ticket_id = t.id
+                           AND a.action_type IN ('VOID', 'CORRECTION') LIMIT 1),
+                        t.price_cents
+                    ) AS effective_price_cents
+                    FROM tickets t
+                )
                 SELECT
                     COUNT(DISTINCT s.driver_id) AS drivers,
                     COUNT(DISTINCT s.id) AS shifts,
                     COUNT(t.id) AS tickets,
-                    COALESCE(SUM(t.price_cents), 0) AS cash_cents
+                    COALESCE(SUM(t.effective_price_cents), 0) AS cash_cents
                 FROM shifts s
-                LEFT JOIN tickets t ON t.shift_id = s.id
+                LEFT JOIN effective_tickets t ON t.shift_id = s.id
                 """
             ).fetchone()
             reconciliation = connection.execute(
@@ -561,19 +594,38 @@ class SyncDatabase:
             ).fetchone()
             fares = connection.execute(
                 """
-                SELECT fare_type_id, COUNT(*) AS tickets, SUM(price_cents) AS cash_cents
-                FROM tickets GROUP BY fare_type_id ORDER BY fare_type_id
+                SELECT COALESCE(
+                    (SELECT corrected_fare_type_id FROM ticket_actions a
+                     WHERE a.original_ticket_id = t.id AND a.action_type = 'CORRECTION' LIMIT 1),
+                    t.fare_type_id
+                ) AS fare_type_id,
+                COUNT(*) AS tickets,
+                SUM(COALESCE(
+                    (SELECT CASE a.action_type WHEN 'VOID' THEN 0 ELSE a.corrected_price_cents END
+                     FROM ticket_actions a WHERE a.original_ticket_id = t.id
+                       AND a.action_type IN ('VOID', 'CORRECTION') LIMIT 1),
+                    t.price_cents
+                )) AS cash_cents
+                FROM tickets t GROUP BY 1 ORDER BY 1
                 """
             ).fetchall()
             drivers = connection.execute(
                 """
+                WITH effective_tickets AS (
+                    SELECT t.*, COALESCE(
+                        (SELECT CASE a.action_type WHEN 'VOID' THEN 0 ELSE a.corrected_price_cents END
+                         FROM ticket_actions a WHERE a.original_ticket_id = t.id
+                           AND a.action_type IN ('VOID', 'CORRECTION') LIMIT 1),
+                        t.price_cents
+                    ) AS effective_price_cents FROM tickets t
+                )
                 SELECT
                     s.driver_id,
                     COUNT(DISTINCT s.id) AS shifts,
                     COUNT(t.id) AS tickets,
-                    COALESCE(SUM(t.price_cents), 0) AS cash_cents
+                    COALESCE(SUM(t.effective_price_cents), 0) AS cash_cents
                 FROM shifts s
-                LEFT JOIN tickets t ON t.shift_id = s.id
+                LEFT JOIN effective_tickets t ON t.shift_id = s.id
                 GROUP BY s.driver_id ORDER BY s.driver_id
                 """
             ).fetchall()
@@ -590,6 +642,9 @@ class SyncDatabase:
                     "cashVarianceTotalCents": reconciliation["variance_cents"],
                     "reconciledShiftCount": reconciliation["reconciled_shifts"],
                     "unreconciledShiftCount": reconciliation["unreconciled_shifts"],
+                    "voidCount": connection.execute("SELECT COUNT(*) FROM ticket_actions WHERE action_type = 'VOID'").fetchone()[0],
+                    "correctionCount": connection.execute("SELECT COUNT(*) FROM ticket_actions WHERE action_type = 'CORRECTION'").fetchone()[0],
+                    "reprintCount": connection.execute("SELECT COUNT(*) FROM ticket_actions WHERE action_type = 'REPRINT'").fetchone()[0],
                 },
                 "fares": [
                     {
@@ -658,6 +713,39 @@ class SyncDatabase:
                 }
                 for ticket in tickets
             ]
+            actions = connection.execute(
+                """SELECT id, original_ticket_id, shift_id, action_type, reason, supervisor_id,
+                          authorized_at_millis, created_at_millis, corrected_fare_type_id,
+                          corrected_price_cents
+                   FROM ticket_actions WHERE shift_id = ? ORDER BY created_at_millis, id""",
+                (shift["id"],),
+            ).fetchall()
+            action_values = [
+                {
+                    "actionId": action["id"],
+                    "originalTicketId": action["original_ticket_id"],
+                    "shiftId": action["shift_id"],
+                    "actionType": action["action_type"],
+                    "reason": action["reason"],
+                    "supervisorId": action["supervisor_id"],
+                    "authorizedAtMillis": action["authorized_at_millis"],
+                    "createdAtMillis": action["created_at_millis"],
+                    "correctedFareTypeId": action["corrected_fare_type_id"],
+                    "correctedPriceCents": action["corrected_price_cents"],
+                    "synced": True,
+                }
+                for action in actions
+            ]
+            financial_by_ticket = {
+                action["originalTicketId"]: action
+                for action in action_values
+                if action["actionType"] in ("VOID", "CORRECTION")
+            }
+            effective_cash = sum(
+                0 if financial_by_ticket.get(ticket["ticketId"], {}).get("actionType") == "VOID"
+                else financial_by_ticket.get(ticket["ticketId"], {}).get("correctedPriceCents", ticket["priceCents"])
+                for ticket in ticket_values
+            )
             value = {
                 "shiftId": shift["id"],
                 "driverId": shift["driver_id"],
@@ -670,7 +758,8 @@ class SyncDatabase:
                     shift["ended_at_millis"] - shift["started_at_millis"],
                 ),
                 "ticketCount": len(ticket_values),
-                "cashTotalCents": sum(ticket["priceCents"] for ticket in ticket_values),
+                "cashTotalCents": effective_cash,
+                "grossCashTotalCents": sum(ticket["priceCents"] for ticket in ticket_values),
                 "expectedCashCents": shift["expected_cash_cents"],
                 "declaredCashCents": shift["declared_cash_cents"],
                 "cashVarianceCents": (
@@ -685,6 +774,7 @@ class SyncDatabase:
                 "assignmentId": shift["assignment_id"],
                 "syncStatus": "SYNCED",
                 "tickets": ticket_values,
+                "ticketActions": action_values,
             }
             result.append(value)
         return result
@@ -1021,3 +1111,43 @@ class SyncDatabase:
             """,
             (ticket.id, *expected, request_id),
         )
+
+    @staticmethod
+    def _insert_or_match_ticket_action(
+        connection: sqlite3.Connection,
+        action: TicketActionInput,
+        request_id: str,
+    ) -> None:
+        ticket = connection.execute(
+            "SELECT shift_id, sold_at_millis FROM tickets WHERE id = ?", (action.original_ticket_id,)
+        ).fetchone()
+        if ticket is None or ticket["shift_id"] != action.shift_id:
+            raise ContractError("Ticket action references an unknown ticket or shift", 409)
+        if action.authorized_at_millis < ticket["sold_at_millis"]:
+            raise ContractError("Ticket action authorization predates the sale")
+        expected = (
+            action.original_ticket_id, action.shift_id, action.action_type, action.reason,
+            action.supervisor_id, action.authorized_at_millis, action.created_at_millis,
+            action.corrected_fare_type_id, action.corrected_price_cents,
+        )
+        existing = connection.execute("SELECT * FROM ticket_actions WHERE id = ?", (action.id,)).fetchone()
+        if existing is not None:
+            actual = tuple(existing[name] for name in (
+                "original_ticket_id", "shift_id", "action_type", "reason", "supervisor_id",
+                "authorized_at_millis", "created_at_millis", "corrected_fare_type_id",
+                "corrected_price_cents",
+            ))
+            if actual != expected:
+                raise ContractError("Ticket action ID already exists with different data", 409)
+            return
+        try:
+            connection.execute(
+                """INSERT INTO ticket_actions(
+                    id, original_ticket_id, shift_id, action_type, reason, supervisor_id,
+                    authorized_at_millis, created_at_millis, corrected_fare_type_id,
+                    corrected_price_cents, first_request_id
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (action.id, *expected, request_id),
+            )
+        except sqlite3.IntegrityError as error:
+            raise ContractError("Ticket already has a void or correction", 409) from error

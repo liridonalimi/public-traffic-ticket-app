@@ -52,6 +52,16 @@ Derived values include:
 - There is no role or permission model yet.
 - Login and logout audit events are not stored yet.
 
+## Testing and validation
+
+- Assert shift start is rejected when `signedInDriver` is null.
+- Persist a selected driver, recreate the application state, and assert the same ID is restored.
+- Start a shift and assert driver selection and sign-out paths do not mutate identity.
+- Restore an active shift and assert its `driverId` takes precedence over a stale selected-driver value.
+- Close the shift, sign out, select another driver, and assert each closed shift retains its original driver ID.
+
+Expected invariant: driver attribution is copied into the shift at start and cannot change during that shift.
+
 ## Next technical step
 
 Add ticket fare types and discounts so ticket sales can use more than one fixed standard price.

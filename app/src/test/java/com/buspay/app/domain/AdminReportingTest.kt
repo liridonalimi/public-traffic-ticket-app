@@ -155,6 +155,38 @@ class AdminReportingTest {
         assertEquals(1, report.dataQuality.unknownRouteShiftCount)
     }
 
+    @Test
+    fun `voids and corrections adjust revenue while preserving gross tickets and audit history`() {
+        val actions = listOf(
+            ticketAction("action-void", "ticket-1", "shift-1", TicketActionType.VOID),
+            ticketAction(
+                "action-correction", "ticket-3", "shift-2", TicketActionType.CORRECTION,
+                correctedFareTypeId = "student", correctedPriceCents = 20
+            ),
+            ticketAction("action-reprint", "ticket-4", "shift-3", TicketActionType.REPRINT)
+        )
+
+        val report = buildAdminReport(
+            closedShifts = shifts,
+            tickets = tickets,
+            drivers = drivers,
+            buses = buses,
+            routes = routes,
+            fareTypes = fares,
+            generatedAtMillis = 1_000L,
+            ticketActions = actions
+        )
+
+        assertEquals(80, report.totals.cashTotalCents)
+        assertEquals(1, report.totals.voidCount)
+        assertEquals(1, report.totals.correctionCount)
+        assertEquals(1, report.totals.reprintCount)
+        assertEquals(80, report.shifts.first { it.shiftId == "shift-1" }.grossCashTotalCents)
+        assertEquals(30, report.shifts.first { it.shiftId == "shift-1" }.cashTotalCents)
+        assertEquals(1, report.shifts.first { it.shiftId == "shift-3" }.ticketActions.size)
+        assertEquals(50, tickets.first().priceCents)
+    }
+
     private fun buildReport(filter: AdminReportFilter = AdminReportFilter()): AdminReport {
         return buildAdminReport(
             closedShifts = shifts,
@@ -197,5 +229,25 @@ class AdminReportingTest {
         soldAtMillis = 1L,
         synced = synced,
         printStatus = TicketPrintStatus.PRINTED
+    )
+
+    private fun ticketAction(
+        id: String,
+        ticketId: String,
+        shiftId: String,
+        actionType: TicketActionType,
+        correctedFareTypeId: String? = null,
+        correctedPriceCents: Int? = null
+    ) = TicketAction(
+        id = id,
+        originalTicketId = ticketId,
+        shiftId = shiftId,
+        actionType = actionType,
+        reason = TicketActionReason.OTHER,
+        supervisorId = "supervisor-1",
+        authorizedAtMillis = 10L,
+        createdAtMillis = 10L,
+        correctedFareTypeId = correctedFareTypeId,
+        correctedPriceCents = correctedPriceCents
     )
 }

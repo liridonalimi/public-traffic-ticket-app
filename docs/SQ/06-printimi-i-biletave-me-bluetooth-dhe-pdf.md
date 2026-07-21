@@ -49,6 +49,17 @@ Testimi fizik mbetet i domosdoshëm për secilin model printeri, sepse gjerësia
 
 Android 12 dhe versionet më të reja kërkojnë lejen për pajisjet në afërsi/Bluetooth para leximit të printerëve të çiftuar ose lidhjes. Versionet më të vjetra përdorin lejet tradicionale Bluetooth. Testimi PDF mbetet i disponueshëm kur leja Bluetooth refuzohet.
 
+## Testimi dhe validimi
+
+1. Refuzoni lejen Bluetooth, zgjidhni printerin testues PDF dhe shitni një biletë. Pritet shitje e suksesshme dhe PDF i lexueshëm.
+2. Hapeni PDF-në dhe kontrolloni kodin, autobusin, linjën, shoferin, tarifën, shumën, kohën, QR-në dhe shenjën `JO FISKAL`.
+3. Simuloni dështim printimi. Pritet që bileta të mbetet e ruajtur si e dështuar/në pritje dhe mbyllja e turnit të bllokohet.
+4. Riprovoni printimin. Duhet të përdoret e njëjta ID bilete, të rritet numri i tentimeve dhe të mos rriten biletat ose arka.
+5. Pas printimit të suksesshëm, mbylleni turnin dhe konfirmoni një shitje të vetme në total.
+6. Me printer fizik, përsëriteni përmes Bluetooth Classic ESC/POS dhe kontrolloni çiftimin, rilidhjen, shkronjat shqipe, letrën dhe rikuperimin nga gabimi.
+
+Pranimi kërkon ruajtje para printimit, riprovim pa dyfishim dhe ndarje të qartë nga certifikimi fiskal.
+
 ## Kufizimet aktuale
 
 - PDF-ja testuese nuk mund ta validojë transportin Bluetooth ose sjelljen fizike të letrës.

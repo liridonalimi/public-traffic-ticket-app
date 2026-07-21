@@ -49,6 +49,16 @@ The active shift ticket count and the pending sync count can be different. The a
 - There is no ticket deduplication or conflict handling yet.
 - Local data corruption handling is minimal.
 
+## Testing and validation
+
+- Repository round-trip tests serialize and decode active shifts and tickets with stable IDs and amounts.
+- Save two tickets, recreate the ViewModel/application process, and assert the same shift and two records are restored.
+- Add a third ticket after restoration and assert there is no duplication of the first two.
+- Close the shift and assert only `active_shift` is cleared; the ticket JSON remains available in the unsynced queue.
+- Repeat with networking disabled to prove no transport dependency exists.
+
+Expected invariant: persistence operations never invent, discard, or change the monetary value of a ticket.
+
 ## Next technical step
 
 Add driver login and driver identity so tickets are linked to a real driver instead of the current demo driver.

@@ -55,6 +55,16 @@ Derived values include:
 - No route progress based on GPS yet.
 - No printer integration yet.
 
+## Testing and validation
+
+- Unit-test derived ticket count and cash totals for zero, one, and multiple 50-cent sales.
+- On a tablet, verify shift start requires bus/route selection and locks both selections while active.
+- Sell three tickets and assert the UI and closed summary both show three tickets and 150 cents.
+- Invoke sale with no active shift and assert the ticket collection is unchanged.
+- End the shift twice and assert only the first action creates the closed summary.
+
+The regression boundary is the Compose state transition from ready, to active, to closed without persistence or server assumptions.
+
 ## Next technical step
 
 Add Room or another local persistence layer so shifts and tickets survive app restarts and can later sync to the central server.

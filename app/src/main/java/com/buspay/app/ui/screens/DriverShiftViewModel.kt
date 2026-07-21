@@ -42,8 +42,12 @@ import com.buspay.app.domain.StopRequest
 import com.buspay.app.domain.Stop
 import com.buspay.app.domain.SyncResult
 import com.buspay.app.domain.Ticket
+import com.buspay.app.domain.TicketAction
+import com.buspay.app.domain.TicketActionReason
+import com.buspay.app.domain.TicketActionType
 import com.buspay.app.domain.TicketPrintStatus
 import com.buspay.app.domain.createSyncBatch
+import com.buspay.app.domain.collectSyncRecords
 import com.buspay.app.domain.dutiesForDriver
 import com.buspay.app.domain.buildAdminReport
 import com.buspay.app.domain.calculateFareQuote
@@ -52,6 +56,7 @@ import com.buspay.app.domain.nearestForwardStopIndex
 import com.buspay.app.domain.routeStopStatus
 import com.buspay.app.domain.summarizeTicketsByFare
 import com.buspay.app.domain.isOperationallyValid
+import com.buspay.app.domain.validateTicketAction
 import kotlinx.coroutines.launch
 import java.text.DateFormat
 import java.util.Date
@@ -86,6 +91,7 @@ data class DriverShiftUiState(
     val pendingTicketCount: Int = 0,
     val pendingShiftCount: Int = 0,
     val syncableTicketCount: Int = 0,
+    val pendingTicketActionCount: Int = 0,
     val isSyncing: Boolean = false,
     val syncRuntimeMode: SyncRuntimeMode = SyncRuntimeMode.DEMO,
     val isDemoSyncMode: Boolean = true,
@@ -100,6 +106,9 @@ data class DriverShiftUiState(
     val catalogUpdatedAtMillis: Long? = null,
     val catalogMessage: String? = null,
     val adminReport: AdminReport? = null,
+    val correctionTickets: List<Ticket> = emptyList(),
+    val ticketActions: List<TicketAction> = emptyList(),
+    val ticketActionMessage: String? = null,
     val lastClosedSummary: DriverShiftSummary? = null,
     val lastClosedRoute: Route? = null,
     val lastClosedRouteProgress: RouteProgress? = null
@@ -468,9 +477,17 @@ class DriverShiftViewModel(application: Application) : AndroidViewModel(applicat
 
     fun syncPendingData() {
         if (uiState.isSyncing) return
-        val shifts = repository.pendingClosedShifts()
-        val tickets = repository.pendingTicketsForSync(uiState.activeShift?.id)
-        if (shifts.isEmpty() && tickets.isEmpty()) {
+        val actions = repository.pendingTicketActionsForSync()
+        val records = collectSyncRecords(
+            pendingShifts = repository.pendingClosedShifts(),
+            pendingTickets = repository.pendingTicketsForSync(uiState.activeShift?.id),
+            pendingTicketActions = actions,
+            allClosedShifts = repository.closedShiftsForReporting(),
+            allTickets = repository.ticketsForReporting()
+        )
+        val shifts = records.shifts
+        val tickets = records.tickets
+        if (shifts.isEmpty() && tickets.isEmpty() && actions.isEmpty()) {
             uiState = uiState.copy(
                 syncMessage = if (uiState.isShiftActive && uiState.pendingTicketCount > 0) {
                     text(R.string.vm_active_tickets_wait)
@@ -481,7 +498,7 @@ class DriverShiftViewModel(application: Application) : AndroidViewModel(applicat
             return
         }
 
-        val batch = createSyncBatch(shifts, tickets)
+        val batch = createSyncBatch(shifts, tickets, records.ticketActions)
         uiState = uiState.copy(
             isSyncing = true,
             syncMessage = text(R.string.vm_sending_sync, shifts.size, tickets.size)
@@ -491,7 +508,8 @@ class DriverShiftViewModel(application: Application) : AndroidViewModel(applicat
                 is SyncResult.Success -> {
                     repository.markSyncAcknowledged(
                         shiftIds = result.acknowledgement.acknowledgedShiftIds,
-                        ticketIds = result.acknowledgement.acknowledgedTicketIds
+                        ticketIds = result.acknowledgement.acknowledgedTicketIds,
+                        ticketActionIds = result.acknowledgement.acknowledgedTicketActionIds
                     )
                     refreshSyncState(
                         message = text(
@@ -592,6 +610,41 @@ class DriverShiftViewModel(application: Application) : AndroidViewModel(applicat
         uiState.unprintedTickets.lastOrNull()?.let(::printTicket)
     }
 
+    fun recordTicketAction(
+        ticket: Ticket,
+        actionType: TicketActionType,
+        reason: TicketActionReason,
+        supervisorId: String,
+        correctedFareTypeId: String? = null,
+        correctedPriceCents: Int? = null
+    ) {
+        if (uiState.isShiftActive || uiState.isPrinting) return
+        val storedTicket = repository.ticketsForReporting().firstOrNull { it.id == ticket.id } ?: return
+        val now = System.currentTimeMillis()
+        val action = TicketAction(
+            id = "ticket-action-${UUID.randomUUID()}",
+            originalTicketId = storedTicket.id,
+            shiftId = storedTicket.shiftId,
+            actionType = actionType,
+            reason = reason,
+            supervisorId = supervisorId.trim(),
+            authorizedAtMillis = now,
+            createdAtMillis = now,
+            correctedFareTypeId = correctedFareTypeId,
+            correctedPriceCents = correctedPriceCents
+        )
+        val existing = repository.ticketActionsForReporting()
+        if (!validateTicketAction(storedTicket, existing, action)) {
+            uiState = uiState.copy(ticketActionMessage = text(R.string.vm_ticket_action_invalid))
+            return
+        }
+        if (actionType == TicketActionType.REPRINT) {
+            reprintHistoricalTicket(storedTicket, action)
+        } else {
+            persistTicketAction(action)
+        }
+    }
+
     fun endShift(declaredCashCents: Int) {
         if (!uiState.isShiftActive || uiState.isPrinting || uiState.unprintedTickets.isNotEmpty()) {
             return
@@ -636,7 +689,8 @@ class DriverShiftViewModel(application: Application) : AndroidViewModel(applicat
             ),
             lastClosedRoute = closedRoute,
             lastClosedRouteProgress = closedRouteProgress,
-            selectedDuty = null
+            selectedDuty = null,
+            correctionTickets = repository.ticketsForReporting().sortedByDescending(Ticket::soldAtMillis)
         )
     }
 
@@ -713,6 +767,7 @@ class DriverShiftViewModel(application: Application) : AndroidViewModel(applicat
             pendingTicketCount = repository.pendingTicketCount(),
             pendingShiftCount = repository.pendingShiftCount(),
             syncableTicketCount = repository.pendingTicketsForSync(restoredShift?.id).size,
+            pendingTicketActionCount = repository.pendingTicketActionCount(),
             syncRuntimeMode = syncRuntimeConfig.mode,
             isDemoSyncMode = syncRuntimeConfig.mode == SyncRuntimeMode.DEMO,
             isDemoServerAvailable = demoSyncClient?.isAvailable == true,
@@ -725,8 +780,11 @@ class DriverShiftViewModel(application: Application) : AndroidViewModel(applicat
                 drivers = availableDrivers,
                 buses = availableBuses,
                 routes = availableRoutes,
-                fareTypes = availableFares
-            )
+                fareTypes = availableFares,
+                ticketActions = repository.ticketActionsForReporting()
+            ),
+            correctionTickets = repository.ticketsForReporting().sortedByDescending(Ticket::soldAtMillis),
+            ticketActions = repository.ticketActionsForReporting()
         )
     }
 
@@ -871,9 +929,11 @@ class DriverShiftViewModel(application: Application) : AndroidViewModel(applicat
             pendingTicketCount = repository.pendingTicketCount(),
             pendingShiftCount = repository.pendingShiftCount(),
             syncableTicketCount = repository.pendingTicketsForSync(uiState.activeShift?.id).size,
+            pendingTicketActionCount = repository.pendingTicketActionCount(),
             isSyncing = false,
             isDemoServerAvailable = demoSyncClient?.isAvailable == true,
             syncMessage = message,
+            ticketActions = repository.ticketActionsForReporting(),
             adminReport = createAdminReport()
         )
     }
@@ -892,8 +952,52 @@ class DriverShiftViewModel(application: Application) : AndroidViewModel(applicat
             buses = uiState.buses,
             routes = uiState.routes,
             fareTypes = uiState.fareTypes,
-            filter = filter
+            filter = filter,
+            ticketActions = repository.ticketActionsForReporting()
         )
+    }
+
+    private fun persistTicketAction(action: TicketAction) {
+        repository.saveTicketAction(action)
+        val actions = repository.ticketActionsForReporting()
+        uiState = uiState.copy(
+            ticketActions = actions,
+            pendingTicketActionCount = repository.pendingTicketActionCount(),
+            ticketActionMessage = text(R.string.vm_ticket_action_recorded, action.actionType.name),
+            adminReport = createAdminReport()
+        )
+    }
+
+    private fun reprintHistoricalTicket(ticket: Ticket, action: TicketAction) {
+        val printer = uiState.selectedPrinter
+        if (printer == null) {
+            uiState = uiState.copy(ticketActionMessage = text(R.string.vm_select_printer_printing))
+            return
+        }
+        val shift = repository.closedShiftsForReporting().firstOrNull { it.id == ticket.shiftId } ?: return
+        val printable = PrintableTicket(
+            ticketCode = ticket.id.removePrefix("ticket-").take(8).uppercase(),
+            busPlateNumber = uiState.buses.firstOrNull { it.id == shift.busId }?.plateNumber ?: shift.busId,
+            routeName = uiState.routes.firstOrNull { it.id == shift.routeId }?.name ?: shift.routeId,
+            fareName = uiState.fareTypes.firstOrNull { it.id == ticket.fareTypeId }?.name ?: ticket.fareTypeId,
+            priceCents = ticket.priceCents,
+            soldAtText = DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT).format(Date(ticket.soldAtMillis)),
+            operatorName = uiState.availableDrivers.firstOrNull { it.id == shift.driverId }?.name ?: shift.driverId
+        )
+        uiState = uiState.copy(isPrinting = true, ticketActionMessage = text(R.string.vm_reprinting_ticket))
+        viewModelScope.launch {
+            val selectedPrinter = if (PdfTicketPrinter.isPdfTestDevice(printer)) pdfTicketPrinter else bluetoothTicketPrinter
+            when (val result = selectedPrinter.printTicket(printer, printable)) {
+                is PrintResult.Success -> {
+                    uiState = uiState.copy(isPrinting = false, lastPdfPath = result.outputPath ?: uiState.lastPdfPath)
+                    persistTicketAction(action)
+                }
+                is PrintResult.Failure -> uiState = uiState.copy(
+                    isPrinting = false,
+                    ticketActionMessage = text(R.string.vm_print_failed, result.message)
+                )
+            }
+        }
     }
 
     override fun onCleared() {

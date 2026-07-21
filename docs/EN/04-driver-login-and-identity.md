@@ -21,6 +21,17 @@ This module improves driver accountability. Ticket sales and cash totals are now
 
 The app uses a local demo driver list inside the Android app. The signed-in driver is stored locally through the offline-first repository. Starting a shift is blocked until a driver is signed in, and sign-out is blocked while a shift is active.
 
+## Testing and validation
+
+1. Launch the app without signing in and attempt to start a shift. Expected: shift start remains blocked.
+2. Select a driver, sign in, and confirm the driver name and ID appear on the console.
+3. Start a shift and confirm sign-out and driver switching are unavailable.
+4. Fully restart the app during the shift. Expected: the active shift restores with the same driver ID.
+5. End the shift, sign out, select a different driver, and start another shift.
+6. Confirm the two closed shifts retain their respective driver identities instead of inheriting the latest sign-in.
+
+The acceptance result is stable driver attribution and no identity change during active service.
+
 ## Planned improvements
 
 - Replace the local driver list with backend authentication.

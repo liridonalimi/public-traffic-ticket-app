@@ -37,6 +37,17 @@ This module supports real passenger categories, improves cash reconciliation, an
 - There is no configurable validity period, zone pricing, transfer fare, pass, or promotional fare yet.
 - Fare names and guidance are currently displayed in the application's pilot language rather than being fully localized.
 
+## Testing and validation
+
+1. Start a shift and sell one Standard, Student, Senior 65+, and Child ticket.
+2. Before each sale, confirm the displayed eligibility guidance and price match the selected fare.
+3. Expected totals: four tickets and EUR 1.25, split as EUR 0.50, EUR 0.30, EUR 0.25, and EUR 0.20.
+4. End the shift and confirm the same per-fare counts and cash subtotals appear in the closed-shift summary.
+5. Restart the app and confirm each stored ticket retains its fare ID and charged price.
+6. Load a legacy ticket without a fare ID through the compatibility test. Expected: it is reported as Standard without rewriting its stored amount.
+
+The acceptance result is that mixed fares reconcile to the overall shift cash and historical charged prices remain immutable.
+
 ## Next module
 
 Module 06 connected each stored ticket sale to Bluetooth ESC/POS printing and a PDF test-printer workflow.

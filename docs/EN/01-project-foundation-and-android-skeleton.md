@@ -39,6 +39,16 @@ The foundation remains the base of the application. Later modules have filled in
 
 Module 01 intentionally did not provide a complete operational workflow. Driver authentication, shift handling, permanent local storage, printer communication, live GPS behavior, server synchronization, and reporting were scheduled for later modules.
 
+## Testing and validation
+
+1. Open the project in Android Studio and allow Gradle synchronization to finish without unresolved dependencies.
+2. Build and install the debug application on an emulator or physical tablet.
+3. Launch BusPay and confirm the initial driver console renders without a crash or blank screen.
+4. Rotate or resize the device and confirm the Compose screen remains usable.
+5. Run the Android unit-test, debug assembly, and lint tasks. Expected: all tasks complete successfully and a debug APK is produced.
+
+This validates the installable application, Compose entry point, Android resources, and architectural package boundaries. It does not validate later shift, persistence, hardware, or server behavior.
+
 ## Next module
 
 Module 02 added the first complete driver shift flow with bus and route selection, ticket totals, and shift closure.

@@ -3,6 +3,9 @@ package com.buspay.app.data
 import com.buspay.app.domain.Shift
 import com.buspay.app.domain.SyncResult
 import com.buspay.app.domain.Ticket
+import com.buspay.app.domain.TicketAction
+import com.buspay.app.domain.TicketActionReason
+import com.buspay.app.domain.TicketActionType
 import com.buspay.app.domain.createSyncBatch
 import java.io.IOException
 import kotlinx.coroutines.runBlocking
@@ -32,6 +35,18 @@ class ProductionTransitSyncClientTest {
         priceCents = 30,
         soldAtMillis = 150L,
         synced = false
+    )
+    private val ticketAction = TicketAction(
+        id = "action-1",
+        originalTicketId = ticket.id,
+        shiftId = shift.id,
+        actionType = TicketActionType.CORRECTION,
+        reason = TicketActionReason.WRONG_FARE,
+        supervisorId = "supervisor-1",
+        authorizedAtMillis = 300L,
+        createdAtMillis = 300L,
+        correctedFareTypeId = "standard",
+        correctedPriceCents = 50
     )
 
     @Test
@@ -113,6 +128,27 @@ class ProductionTransitSyncClientTest {
     }
 
     @Test
+    fun `ticket actions are serialized and acknowledged independently`() = runBlocking {
+        val batch = createSyncBatch(emptyList(), emptyList(), listOf(ticketAction))
+        val transport = RecordingTransport {
+            SyncHttpResponse(200, acknowledgement(
+                requestId = batch.requestId,
+                ticketActionIds = listOf(ticketAction.id)
+            ))
+        }
+
+        val result = client(transport).sync(batch)
+
+        assertTrue(result is SyncResult.Success)
+        assertTrue(requireNotNull(transport.lastRequest).body.contains("\"actionType\":\"CORRECTION\""))
+        assertTrue(transport.lastRequest!!.body.contains("\"supervisorId\":\"supervisor-1\""))
+        assertEquals(
+            setOf(ticketAction.id),
+            (result as SyncResult.Success).acknowledgement.acknowledgedTicketActionIds
+        )
+    }
+
+    @Test
     fun `mismatched request or unknown acknowledgement is rejected`() = runBlocking {
         val batch = createSyncBatch(listOf(shift), listOf(ticket))
         val wrongRequest = client(
@@ -173,16 +209,19 @@ class ProductionTransitSyncClientTest {
     private fun acknowledgement(
         requestId: String,
         shiftIds: List<String> = emptyList(),
-        ticketIds: List<String> = emptyList()
+        ticketIds: List<String> = emptyList(),
+        ticketActionIds: List<String> = emptyList()
     ): String {
         val shifts = shiftIds.joinToString(",") { "\"$it\"" }
         val tickets = ticketIds.joinToString(",") { "\"$it\"" }
+        val actions = ticketActionIds.joinToString(",") { "\"$it\"" }
         return """
             {
               "contractVersion": 1,
               "requestId": "$requestId",
               "acknowledgedShiftIds": [$shifts],
-              "acknowledgedTicketIds": [$tickets]
+              "acknowledgedTicketIds": [$tickets],
+              "acknowledgedTicketActionIds": [$actions]
             }
         """.trimIndent()
     }

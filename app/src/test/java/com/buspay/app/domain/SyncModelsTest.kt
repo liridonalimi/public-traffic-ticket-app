@@ -7,6 +7,48 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class SyncModelsTest {
+    @Test
+    fun `pending ticket action carries original ticket and shift even when previously marked synced`() {
+        val shift = Shift(
+            id = "shift-demo-acknowledged",
+            driverId = "driver",
+            busId = "bus",
+            routeId = "route",
+            startedAtMillis = 1L,
+            endedAtMillis = 2L,
+            synced = true
+        )
+        val ticket = Ticket(
+            id = "ticket-demo-acknowledged",
+            shiftId = shift.id,
+            priceCents = 50,
+            soldAtMillis = 1L,
+            synced = true
+        )
+        val action = TicketAction(
+            id = "action-pending",
+            originalTicketId = ticket.id,
+            shiftId = shift.id,
+            actionType = TicketActionType.VOID,
+            reason = TicketActionReason.OTHER,
+            supervisorId = "supervisor",
+            authorizedAtMillis = 3L,
+            createdAtMillis = 3L
+        )
+
+        val records = collectSyncRecords(
+            pendingShifts = emptyList(),
+            pendingTickets = emptyList(),
+            pendingTicketActions = listOf(action),
+            allClosedShifts = listOf(shift),
+            allTickets = listOf(ticket)
+        )
+
+        assertEquals(listOf(shift), records.shifts)
+        assertEquals(listOf(ticket), records.tickets)
+        assertEquals(listOf(action), records.ticketActions)
+    }
+
     private val shift = Shift(
         id = "shift-1",
         driverId = "driver-1",

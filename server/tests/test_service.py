@@ -61,6 +61,31 @@ def batch_payload(request_id="sync-0123456789abcdef", price_cents=30):
     }
 
 
+def ticket_action_payload(
+    request_id="sync-fedcba9876543210",
+    action_id="action-1",
+    action_type="VOID",
+    corrected_price_cents=None,
+):
+    payload = batch_payload(request_id=request_id)
+    payload["shifts"] = []
+    payload["tickets"] = []
+    action = {
+        "id": action_id,
+        "originalTicketId": "ticket-1",
+        "shiftId": "shift-1",
+        "actionType": action_type,
+        "reason": "WRONG_FARE" if action_type == "CORRECTION" else "PASSENGER_REQUEST",
+        "supervisorId": "supervisor-001",
+        "authorizedAtMillis": 400,
+        "createdAtMillis": 400,
+        "correctedFareTypeId": "standard" if action_type == "CORRECTION" else None,
+        "correctedPriceCents": corrected_price_cents,
+    }
+    payload["ticketActions"] = [action]
+    return payload
+
+
 def catalog_payload(expected_revision=1):
     return {
         "contractVersion": 1,
@@ -127,6 +152,17 @@ def catalog_payload(expected_revision=1):
 
 
 class ContractTest(unittest.TestCase):
+    def test_ticket_actions_require_authorization_reason_and_correction_value(self):
+        correction = parse_sync_batch(ticket_action_payload(action_type="CORRECTION", corrected_price_cents=20))
+        missing_supervisor = ticket_action_payload()
+        missing_supervisor["ticketActions"][0]["supervisorId"] = ""
+        incomplete_correction = ticket_action_payload(action_type="CORRECTION")
+
+        self.assertEqual("supervisor-001", correction.ticket_actions[0].supervisor_id)
+        for invalid in (missing_supervisor, incomplete_correction):
+            with self.assertRaises(ContractError):
+                parse_sync_batch(invalid)
+
     def test_contract_rejects_active_duplicate_and_unsupported_records(self):
         active = batch_payload()
         active["shifts"][0]["endedAtMillis"] = 50
@@ -255,6 +291,38 @@ class DatabaseTest(unittest.TestCase):
         self.assertEqual("stop-destination", ticket["destinationStopId"])
         self.assertEqual(2, ticket["zoneCount"])
         self.assertTrue(ticket["offPeakApplied"])
+
+    def test_void_correction_and_reprint_are_append_only_and_project_revenue_once(self):
+        self.database.ingest(parse_sync_batch(batch_payload()))
+        void_batch = parse_sync_batch(ticket_action_payload())
+        first, replayed = self.database.ingest(void_batch)
+        retried_payload = ticket_action_payload()
+        retried_payload["sentAtMillis"] = 999
+        second, second_replayed = self.database.ingest(parse_sync_batch(retried_payload))
+        reprint = ticket_action_payload(
+            request_id="sync-aaaaaaaaaaaaaaaa", action_id="action-reprint", action_type="REPRINT"
+        )
+        reprint["ticketActions"][0]["reason"] = "DAMAGED_PRINT"
+        self.database.ingest(parse_sync_batch(reprint))
+        report = self.database.report()
+
+        self.assertFalse(replayed)
+        self.assertTrue(second_replayed)
+        self.assertEqual(first, second)
+        self.assertEqual(["action-1"], first["acknowledgedTicketActionIds"])
+        self.assertEqual(0, report["overall"]["cashTotalCents"])
+        self.assertEqual(1, report["overall"]["voidCount"])
+        self.assertEqual(1, report["overall"]["reprintCount"])
+        self.assertEqual(30, report["shifts"][0]["grossCashTotalCents"])
+        self.assertEqual(2, len(report["shifts"][0]["ticketActions"]))
+
+        duplicate_financial = ticket_action_payload(
+            request_id="sync-bbbbbbbbbbbbbbbb", action_id="action-correction",
+            action_type="CORRECTION", corrected_price_cents=20,
+        )
+        with self.assertRaises(ContractError):
+            self.database.ingest(parse_sync_batch(duplicate_financial))
+        self.assertEqual(0, self.database.report()["overall"]["cashTotalCents"])
 
     def test_existing_shift_table_is_migrated_for_reconciliation(self):
         legacy_path = str(Path(self.temp_directory.name) / "legacy.db")
@@ -603,6 +671,21 @@ class ApplicationTest(unittest.TestCase):
         self.assertEqual("student", report["fares"][0]["fareTypeId"])
         self.assertEqual(["shift-1"], report["drivers"][0]["shiftIds"])
         self.assertEqual("SYNCED", report["shifts"][0]["syncStatus"])
+
+    def test_authenticated_action_only_sync_updates_report_without_duplicate_sale(self):
+        self.request("POST", "/v1/sync", batch_payload(), TOKEN)
+        action_status, _, acknowledgement = self.request(
+            "POST", "/v1/sync", ticket_action_payload(), TOKEN
+        )
+        report_status, _, report = self.request("GET", "/v1/reports/admin", token=TOKEN)
+
+        self.assertEqual(200, action_status)
+        self.assertEqual(["action-1"], acknowledgement["acknowledgedTicketActionIds"])
+        self.assertEqual(200, report_status)
+        self.assertEqual(1, report["overall"]["ticketCount"])
+        self.assertEqual(0, report["overall"]["cashTotalCents"])
+        self.assertEqual(1, report["overall"]["voidCount"])
+        self.assertEqual("VOID", report["shifts"][0]["ticketActions"][0]["actionType"])
 
     def test_invalid_content_and_method_return_safe_errors(self):
         method_status, method_headers, _ = self.request("GET", "/v1/sync", token=TOKEN)

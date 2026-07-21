@@ -20,6 +20,17 @@ Ky modul mbron te dhenat e biletave dhe te arkes gjate operimit ditor te autobus
 
 Aplikacioni perdor ruajtjen lokale te Android permes depozites offline-first. Turni aktiv ruhet ndaras nga lista e biletave. Ekrani i shoferit shfaq totalet e biletave te turnit aktual ndaras nga radha totale lokale e biletave te pasinkronizuara. Biletat mbeten te shenuara si te pasinkronizuara qe nje modul i ardhshem t'i dergoje ne backend.
 
+## Testimi dhe validimi
+
+1. Filloni një turn dhe shitni dy bileta.
+2. Mbylleni plotësisht aplikacionin nga lista e aplikacioneve dhe hapeni përsëri.
+3. Konfirmoni që rikthehen i njëjti turn, numri i biletave dhe totali i arkës.
+4. Shitni edhe një biletë dhe kontrolloni që totali rritet vetëm për atë shitje.
+5. Përfundojeni turnin, rindizeni aplikacionin dhe konfirmoni që turni nuk është aktiv, ndërsa tri biletat mbeten në radhën lokale.
+6. Përsëriteni pa rrjet. Pritet sjellje e njëjtë sepse ruajtja nuk varet nga serveri.
+
+Pranimi kërkon që restarti të mos humbë ose dyfishojë turnin dhe biletat.
+
 ## Permiresimet e planifikuara
 
 - Kalimi ne Room kur modeli i te dhenave te behet me i madh.

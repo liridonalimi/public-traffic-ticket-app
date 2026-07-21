@@ -55,6 +55,8 @@ It currently includes:
 - offline and synchronized expected/declared cash reconciliation in Android and web reports
 - route- and zone-aware fare policies with off-peak discounts and transfer windows
 - immutable applied-fare snapshots for auditable historical ticket prices
+- append-only ticket void, correction, and reprint events with supervisor evidence
+- exactly-once adjusted revenue and synchronized ticket-action audit history
 - cash ticket count and cash total during an active shift
 - persistent local active shift storage
 - persistent local ticket storage for future sync
@@ -90,7 +92,7 @@ It currently includes:
 23. Shift cash reconciliation and handover - complete
 24. Scheduled trips and driver/vehicle assignments - complete
 25. Fare policy engine for zones, time rules, and transfers - complete
-26. Controlled ticket voids, corrections, and reprints - planned
+26. Controlled ticket voids, corrections, and reprints - complete
 27. Verifiable QR tickets and inspector validation - planned
 28. Operational analytics and accountable exports - planned
 29. GTFS Schedule import/export and data-quality validation - planned
@@ -130,6 +132,7 @@ Presentation documentation:
 - English: `docs/EN/23-shift-cash-reconciliation-and-handover.md`
 - English: `docs/EN/24-scheduled-trips-and-assignments.md`
 - English: `docs/EN/25-fare-policy-engine.md`
+- English: `docs/EN/26-controlled-ticket-actions.md`
 - English product roadmap: `docs/EN/PRODUCT_ROADMAP.md`
 - Albanian: `docs/SQ/01-themeli-i-projektit-dhe-skeleti-android.md`
 - Albanian: `docs/SQ/02-rrjedha-e-turnit-te-shoferit.md`
@@ -156,6 +159,7 @@ Presentation documentation:
 - Albanian: `docs/SQ/23-rakordimi-dhe-dorezimi-i-arkes-se-turnit.md`
 - Albanian: `docs/SQ/24-udhetimet-e-planifikuara-dhe-caktimet.md`
 - Albanian: `docs/SQ/25-motori-i-politikave-te-tarifave.md`
+- Albanian: `docs/SQ/26-anulimet-korrigjimet-dhe-riprintimet.md`
 - Albanian product roadmap: `docs/SQ/UDHERREFYESI_I_PRODUKTIT.md`
 
 Technical documentation:
@@ -185,6 +189,7 @@ Technical documentation:
 - `docs/TECHNICAL/23-shift-cash-reconciliation-and-handover.md`
 - `docs/TECHNICAL/24-scheduled-trips-and-assignments.md`
 - `docs/TECHNICAL/25-fare-policy-engine.md`
+- `docs/TECHNICAL/26-controlled-ticket-actions.md`
 - Product roadmap: `docs/TECHNICAL/PRODUCT_ROADMAP.md`
 
 ## Product roadmap

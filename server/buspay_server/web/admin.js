@@ -39,6 +39,7 @@ const elements = {
   metricRevenue: document.querySelector("#metric-revenue"),
   metricShifts: document.querySelector("#metric-shifts"),
   metricTickets: document.querySelector("#metric-tickets"),
+  metricTicketActions: document.querySelector("#metric-ticket-actions"),
   pageTitle: document.querySelector("#page-title"),
   refreshButton: document.querySelector("#refresh-button"),
   refreshAuditButton: document.querySelector("#refresh-audit-button"),
@@ -114,6 +115,7 @@ function renderMetrics(report) {
   elements.metricDeclaredCash.textContent = formatMoney(overall.declaredCashTotalCents);
   elements.metricCashVariance.textContent = formatSignedMoney(overall.cashVarianceTotalCents);
   elements.metricReconciledShifts.textContent = `${Number(overall.reconciledShiftCount) || 0} / ${Number(overall.shiftCount) || 0}`;
+  elements.metricTicketActions.textContent = `${Number(overall.voidCount) || 0} / ${Number(overall.correctionCount) || 0} / ${Number(overall.reprintCount) || 0}`;
 }
 
 function renderFares(report) {
@@ -220,6 +222,10 @@ function shiftCard(shift) {
   schedule.textContent = shift.assignmentId
     ? `Scheduled operation · ${shift.assignmentId} · ${shift.scheduledTripId}`
     : "Ad-hoc pilot operation";
+  const revenue = document.createElement("p");
+  revenue.textContent = shift.grossCashTotalCents !== shift.cashTotalCents
+    ? `Revenue adjustment · gross ${formatMoney(shift.grossCashTotalCents)} · effective ${formatMoney(shift.cashTotalCents)}`
+    : `Revenue · ${formatMoney(shift.cashTotalCents)}`;
   const grid = document.createElement("div");
   grid.className = "ticket-grid";
   (shift.tickets || []).forEach((ticket) => grid.append(ticketItem(ticket)));
@@ -228,7 +234,26 @@ function shiftCard(shift) {
     empty.textContent = "No tickets recorded for this shift.";
     grid.append(empty);
   }
-  body.append(heading, schedule, handover, grid);
+  const actionHeading = document.createElement("h3");
+  actionHeading.textContent = "Ticket action history";
+  const actionGrid = document.createElement("div");
+  actionGrid.className = "ticket-grid";
+  (shift.ticketActions || []).forEach((action) => {
+    const item = document.createElement("div");
+    item.className = "ticket-item";
+    const title = document.createElement("strong");
+    title.textContent = `${labelFare(action.actionType)} · ${action.originalTicketId}`;
+    const evidence = document.createElement("span");
+    evidence.textContent = `${labelFare(action.reason)} · supervisor ${action.supervisorId} · ${formatTime(action.authorizedAtMillis)}`;
+    item.append(title, evidence);
+    actionGrid.append(item);
+  });
+  if (!shift.ticketActions?.length) {
+    const empty = document.createElement("span");
+    empty.textContent = "No post-sale actions recorded.";
+    actionGrid.append(empty);
+  }
+  body.append(heading, schedule, handover, revenue, grid, actionHeading, actionGrid);
   details.append(summary, body);
   return details;
 }
